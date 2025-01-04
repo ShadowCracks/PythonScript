@@ -9,6 +9,27 @@ import uiautomator2 as u2
 from concurrent.futures import ThreadPoolExecutor
 from typing import Optional, Dict, Any
 
+
+def wait_for_element(device, class_name=None, resource_id=None, text=None, description=None, timeout=80,
+                     poll_interval=0.5):
+    """
+    Wait for an element to appear within the given timeout.
+    """
+    end_time = time.time() + timeout
+    while time.time() < end_time:
+        element = device(**{k: v for k, v in {
+            "className": class_name,
+            "resourceId": resource_id,
+            "text": text,
+            "description": description
+        }.items() if v})
+        if element.exists:
+            return element
+        time.sleep(poll_interval)
+    raise Exception(
+        f"Element not found within {timeout} seconds: class_name={class_name}, resource_id={resource_id}, text={text}, description={description}")
+
+
 # Cloud Phone API Constants
 APP_ID = "ME7YWKTAFWBJEUX4AZQCKIGN"
 API_KEY = "B5OH6I6R7BI1024DULUA02VUZLP7QF"
@@ -43,11 +64,12 @@ PROFILE_SETTINGS = {
     "remark": "",
 }
 
+
 class CloudPhoneManager:
     def __init__(self):
         self.profile_id = None
         self.adb_info = None
-        
+
     def generate_headers(self) -> Dict[str, str]:
         """Generate headers required for the API request."""
         trace_id = str(uuid.uuid4())
@@ -55,7 +77,7 @@ class CloudPhoneManager:
         nonce = trace_id[:6]
         to_sign = APP_ID + trace_id + ts + nonce + API_KEY
         sign = hashlib.sha256(to_sign.encode()).hexdigest().upper()
-        
+
         return {
             "Content-Type": "application/json",
             "appId": APP_ID,
@@ -70,16 +92,16 @@ class CloudPhoneManager:
         try:
             with open(PROXY_FILE, "r") as f:
                 proxies = f.readlines()
-            
+
             if not proxies:
                 raise ValueError("Proxy file is empty. Please add proxies to the file.")
 
             selected_proxy = random.choice(proxies).strip()
             updated_proxies = [proxy for proxy in proxies if proxy.strip() != selected_proxy]
-            
+
             with open(PROXY_FILE, "w") as f:
                 f.writelines(updated_proxies)
-            
+
             return selected_proxy
         except FileNotFoundError:
             raise FileNotFoundError(f"Proxy file '{PROXY_FILE}' not found.")
@@ -89,7 +111,7 @@ class CloudPhoneManager:
         parts = proxy.split(":")
         if len(parts) != 4:
             raise ValueError(f"Invalid proxy format: {proxy}")
-        
+
         return {
             "typeId": 1,  # SOCKS5 proxy
             "server": parts[0],
@@ -103,15 +125,23 @@ class CloudPhoneManager:
         proxy = self.get_random_proxy()
         proxy_config = self.parse_proxy(proxy)
         PROFILE_SETTINGS["proxyConfig"] = proxy_config
-        
+
         headers = self.generate_headers()
         response = requests.post(CREATE_PROFILE_URL, headers=headers, json=PROFILE_SETTINGS)
+
+        # Print the full response for debugging
+        print("DEBUG create_profile response:", response.json())
+
         creation_response = response.json()
-        
+
         profile_data = creation_response.get("data", {}).get("details", [{}])[0]
         self.profile_id = profile_data.get("id")
-        
-        return creation_response
+
+        if self.profile_id:
+            return creation_response
+        else:
+            print("Failed to create profile. Response:", creation_response)
+            return creation_response
 
     def start_profile(self) -> str:
         """Start the cloud phone profile."""
@@ -137,13 +167,13 @@ class CloudPhoneManager:
             }
             response = requests.post(ADB_SET_STATUS_URL, headers=headers, json=payload)
             response_data = response.json()
-            
+
             if response_data.get("code") == 0:
                 print("ADB enabled successfully. Waiting for initialization...")
                 time.sleep(10)  # Increased wait time to 10 seconds
             else:
                 raise Exception(f"Failed to enable ADB: {response_data.get('msg')}")
-                
+
         except Exception as e:
             print(f"Error enabling ADB: {str(e)}")
             raise
@@ -159,7 +189,7 @@ class CloudPhoneManager:
                     payload = {"ids": [self.profile_id]}
                     response = requests.post(GET_ADB_INFO_URL, headers=headers, json=payload)
                     response_data = response.json()
-                    
+
                     if response_data.get("code") == 0:
                         adb_info = response_data["data"]["items"][0]
                         if adb_info["code"] == 0:
@@ -174,7 +204,7 @@ class CloudPhoneManager:
                             print(f"ADB info retrieval failed with code: {adb_info['code']}")
                     else:
                         print(f"Failed to get ADB info: {response_data.get('msg')}")
-                    
+
                     if attempt < max_retries - 1:
                         print(f"Retrying in 5 seconds... (Attempt {attempt + 1}/{max_retries})")
                         time.sleep(5)
@@ -184,7 +214,7 @@ class CloudPhoneManager:
                         time.sleep(5)
                     else:
                         raise
-                        
+
             raise Exception("Failed to retrieve ADB information after multiple attempts")
         except Exception as e:
             print(f"Error getting ADB info: {str(e)}")
@@ -203,11 +233,11 @@ class CloudPhoneManager:
 
         try:
             with ThreadPoolExecutor() as executor:
-                file_paths = [os.path.join(subfolder_path, file_name) 
-                            for file_name in os.listdir(subfolder_path) 
-                            if os.path.isfile(os.path.join(subfolder_path, file_name))]
+                file_paths = [os.path.join(subfolder_path, file_name)
+                              for file_name in os.listdir(subfolder_path)
+                              if os.path.isfile(os.path.join(subfolder_path, file_name))]
                 futures = [executor.submit(self.upload_file, file_path) for file_path in file_paths]
-                
+
                 for future in futures:
                     future.result()
 
@@ -222,7 +252,7 @@ class CloudPhoneManager:
         upload_url, resource_url = self.get_signed_upload_url(file_extension)
         self.upload_file_to_signed_url(file_path, upload_url)
         task_id = self.associate_file_with_cloud_phone(resource_url)
-        
+
         while True:
             status = self.query_upload_status(task_id)
             if status == 2:  # Upload successful
@@ -240,7 +270,7 @@ class CloudPhoneManager:
         payload = {"fileType": file_type}
         response = requests.post(GET_UPLOAD_URL, headers=headers, json=payload)
         response_data = response.json()
-        
+
         if response_data.get("code") == 0:
             return response_data["data"]["uploadUrl"], response_data["data"]["resourceUrl"]
         raise Exception(f"Failed to get upload URL: {response_data.get('msg')}")
@@ -258,7 +288,7 @@ class CloudPhoneManager:
         payload = {"id": self.profile_id, "fileUrl": resource_url}
         response = requests.post(UPLOAD_TO_PHONE_URL, headers=headers, json=payload)
         response_data = response.json()
-        
+
         if response_data.get("code") == 0:
             return response_data["data"]["taskId"]
         raise Exception(f"Failed to associate file with phone: {response_data.get('msg')}")
@@ -269,10 +299,11 @@ class CloudPhoneManager:
         payload = {"taskId": task_id}
         response = requests.post(UPLOAD_STATUS_URL, headers=headers, json=payload)
         response_data = response.json()
-        
+
         if response_data.get("code") == 0:
             return response_data["data"]["status"]
         raise Exception(f"Failed to query upload status: {response_data.get('msg')}")
+
     def get_installed_apps(self) -> list:
         """Retrieve the list of installed apps."""
         headers = self.generate_headers()
@@ -283,7 +314,7 @@ class CloudPhoneManager:
         }
         response = requests.post(GET_INSTALLED_APPS_URL, headers=headers, json=payload)
         response_data = response.json()
-        
+
         if response_data.get("code") == 0:
             return response_data["data"]["items"]
         else:
@@ -304,11 +335,12 @@ class CloudPhoneManager:
                 response_data = response.json()
                 if response_data.get("code") == 0:
                     print(f"Bumble app started successfully.")
-                    time.sleep(10)  # Wait for app to fully start
+                    time.sleep(4)  # Wait for app to fully start
                 else:
                     raise Exception(f"Failed to start Bumble app: {response_data.get('msg')}")
                 return
         print("Bumble app is not installed on this device.")
+
 
 class BumbleRegistration:
     def __init__(self, adb_address: str, password: str):
@@ -346,7 +378,6 @@ class BumbleRegistration:
                 else:
                     raise Exception(f"Failed to connect to device after {max_retries} attempts")
 
-
     def delay(self, seconds: float = 2.5):
         """Add a delay between actions."""
         time.sleep(seconds)
@@ -363,7 +394,7 @@ class BumbleRegistration:
         print("Requesting a phone number from DaisySMS...")
         response = requests.get(DAISYSMS_BASE_URL, params=params)
         print(f"DaisySMS response: {response.text}")
-        
+
         if response.status_code == 200:
             # Response format should be: ACCESS_NUMBER:ID:PHONE_NUMBER
             response_parts = response.text.split(':')
@@ -386,7 +417,7 @@ class BumbleRegistration:
 
         response = requests.get(DAISYSMS_BASE_URL, params=params)
         print(f"DaisySMS check response: {response.text}")
-        
+
         if response.status_code == 200:
             # Response should be: STATUS_OK:CODE or STATUS_WAIT_CODE
             response_parts = response.text.split(':')
@@ -396,13 +427,22 @@ class BumbleRegistration:
                 return sms_code
         return None
 
-    # UI Interaction Methods
+        # UI Interaction Methods
+
     def click_use_cell_phone_button(self):
-        """Click 'Use cell phone number' button."""
+        """Click 'Use cell phone number' button using text-based detection."""
         print("Looking for the 'Use cell phone number' button...")
-        if self.device(resourceId="com.bumble.app:id/landing_manualLoginButton").exists:
-            self.device(resourceId="com.bumble.app:id/landing_manualLoginButton").click()
+
+        try:
+            # Use text-based detection to find the button
+            element = wait_for_element(self.device, text="Use cell phone number")
+            element.click()
             self.delay()
+            print("Successfully clicked 'Use cell phone number' button.")
+        except Exception as e:
+            print(f"Error clicking 'Use cell phone number' button: {str(e)}")
+            raise
+
 
     def enter_phone_number(self, phone_number: str):
         """Enter phone number."""
@@ -434,7 +474,6 @@ class BumbleRegistration:
             print("Clicking 'Didn't get a call?'...")
             self.device(resourceId="com.bumble.app:id/reg_footer_label").click()
             self.delay()
-
             print("Clicking 'Get a code instead'...")
             self.device(className="android.widget.Button", description="Get a code instead").click()
             self.delay()
@@ -453,7 +492,6 @@ class BumbleRegistration:
         print("Clicking 'Didn't get a code?'...")
         self.device(resourceId="com.bumble.app:id/reg_footer_label").click()
         self.delay()
-
         print("Clicking 'Change number'...")
         self.device(className="android.widget.TextView", text="Change number").click()
         self.delay()
@@ -469,105 +507,153 @@ class BumbleRegistration:
 
     def enable_location_and_notifications(self):
         """Enable location and notifications."""
+
+        # Step 1: Wait for and click "Set location services"
         print("Setting up location services...")
+        wait_for_element(self.device, resource_id="com.bumble.app:id/enableLocation", text="Set location services")
         self.device(resourceId="com.bumble.app:id/enableLocation", text="Set location services").click()
         self.delay()
 
+        # Step 2: Wait for and click "WHILE USING THE APP"
         print("Allowing location while using app...")
-        self.device(resourceId="com.android.permissioncontroller:id/permission_allow_foreground_only_button", 
-                   text="WHILE USING THE APP").click()
+        wait_for_element(self.device,
+                         resource_id="com.android.permissioncontroller:id/permission_allow_foreground_only_button",
+                         text="WHILE USING THE APP")
+        self.device(resourceId="com.android.permissioncontroller:id/permission_allow_foreground_only_button",
+                    text="WHILE USING THE APP").click()
         self.delay()
 
+        # Step 3: Wait for and click "Allow notifications"
         print("Enabling notifications...")
+        wait_for_element(self.device, class_name="android.widget.TextView", text="Allow notifications")
         self.device(className="android.widget.TextView", text="Allow notifications").click()
         self.delay()
 
-        self.device(resourceId="com.android.permissioncontroller:id/permission_allow_button", 
-                   text="ALLOW").click()
+        # Step 4: Wait for and click "ALLOW" button
+        wait_for_element(self.device, resource_id="com.android.permissioncontroller:id/permission_allow_button",
+                         text="ALLOW")
+        self.device(resourceId="com.android.permissioncontroller:id/permission_allow_button", text="ALLOW").click()
         self.delay()
 
     def enter_name(self):
         """Enter a random name."""
-        print("Waiting for name page to load...")
-        self.delay(9)
 
+        # Step 1: Wait for the name input field to load
+        print("Waiting for name input field to load...")
+        wait_for_element(self.device, class_name="android.widget.EditText")
+
+        # Step 2: Read a random name from the file
         with open("names.txt", "r") as file:
             names = file.readlines()
             name = random.choice(names).strip()
-            print(f"Entering name: {name}")
-            for char in name:
-                self.device.shell(f"input text {char}")
-                time.sleep(0.1)
-        self.delay(2)
+
+        print(f"Entering name: {name}")
+
+        # Step 3: Enter the name character by character
+        for char in name:
+            self.device.shell(f"input text {char}")
+            time.sleep(0.1)
+
+        # Step 4: Delay after entering the name
+        self.delay(1)
 
     def enter_date_of_birth(self):
         """Enter a random date of birth."""
+
+        # Step 1: Generate random date values
         year = random.choice(["2000", "2001", "2002"])
         month = f"{random.randint(1, 12):02}"
         day = f"{random.randint(1, 28):02}"
 
         print(f"Entering DOB: {month}/{day}/{year}")
+
+        # Step 2: Wait for the 'Enter month' field to be available
+        wait_for_element(self.device, class_name="android.widget.EditText", description="Enter month")
+
+        # Step 3: Click on the 'Enter month' field
         self.device(className="android.widget.EditText", description="Enter month").click()
         self.delay(1)
 
+        # Step 4: Enter month, day, and year with a small delay between each part
         for part in [month, day, year]:
             for digit in part:
                 self.device.shell(f"input text {digit}")
                 time.sleep(0.1)
-            self.delay(2)
+            self.delay(1)
 
     def click_continue_buttons(self):
         """Click various continue buttons."""
-        print("Clicking continue buttons...")
-        if self.device(className="android.view.View", description="Continue").exists:
+
+        print("Clicking 'Continue' button...")
+
+        # Wait for the "Continue" button to appear and click it
+        if wait_for_element(self.device, class_name="android.view.View", description="Continue"):
             self.device(className="android.view.View", description="Continue").click()
             self.delay()
 
-        if self.device(className="android.widget.TextView", text="Confirm").exists:
+        print("Clicking 'Confirm' button...")
+
+        # Wait for the "Confirm" button to appear and click it
+        if wait_for_element(self.device, class_name="android.widget.TextView", text="Confirm"):
             self.device(className="android.widget.TextView", text="Confirm").click()
             self.delay()
 
     def setup_profile_preferences(self):
         """Set up profile preferences."""
+
         # Gender selection
         print("Selecting gender...")
-        self.device(className="android.widget.TextView", text="Woman").click()
-        self.delay()
+        if wait_for_element(self.device, class_name="android.widget.TextView", text="Woman"):
+            self.device(className="android.widget.TextView", text="Woman").click()
+            self.delay()
 
         # Click next buttons
+        print("Clicking 'Next' button...")
         self.click_next_button()
         self.click_next_button()
-        
+
         # Skip certain sections
         print("Skipping optional sections...")
-        self.device(resourceId="com.bumble.app:id/reg_footer_label", text="Skip").click()
-        self.delay()
+        if wait_for_element(self.device, resource_id="com.bumble.app:id/reg_footer_label", text="Skip"):
+            self.device(resourceId="com.bumble.app:id/reg_footer_label", text="Skip").click()
+            self.delay()
+
+        # Click next button after skipping
         self.click_next_button()
 
         # Select dating preference
         print("Setting dating preferences...")
-        self.device(className="android.widget.TextView", text="Men").click()
-        self.delay()
-        self.device(resourceId="com.bumble.app:id/reg_footer_button", className="android.widget.Button").click()
-        self.delay()
+        if wait_for_element(self.device, class_name="android.widget.TextView", text="Men"):
+            self.device(className="android.widget.TextView", text="Men").click()
+            self.delay()
+
+        if wait_for_element(self.device, resource_id="com.bumble.app:id/reg_footer_button",
+                            class_name="android.widget.Button"):
+            self.device(resourceId="com.bumble.app:id/reg_footer_button", className="android.widget.Button").click()
+            self.delay()
 
         # Select relationship goal
+        print("Selecting relationship goal...")
         options = [
             "A long-term relationship",
             "Fun, casual dates",
             "Intimacy, without commitment"
         ]
         choice = random.choice(options)
-        self.device(className="android.widget.TextView", text=choice).click()
-        self.delay()
-        self.device(className="android.view.View", description="Continue").click()
-        self.delay()
+        if wait_for_element(self.device, class_name="android.widget.TextView", text=choice):
+            self.device(className="android.widget.TextView", text=choice).click()
+            self.delay()
+
+        if wait_for_element(self.device, class_name="android.view.View", description="Continue"):
+            self.device(className="android.view.View", description="Continue").click()
+            self.delay()
 
     def fill_profile_details(self):
         """Fill in profile details."""
         # Skip height selection
-        self.device(resourceId="com.bumble.app:id/reg_footer_label", text="Skip").click()
-        self.delay()
+        if wait_for_element(self.device, resource_id="com.bumble.app:id/reg_footer_label", text="Skip"):
+            self.device(resourceId="com.bumble.app:id/reg_footer_label", text="Skip").click()
+            self.delay()
 
         # Scroll and select interests
         self.device(scrollable=True).scroll.toEnd()
@@ -585,8 +671,10 @@ class BumbleRegistration:
                 self.delay(0.5)
 
         # Continue after interests
-        self.device(className="android.view.View", description="Continue").click()
-        self.delay()
+        if wait_for_element(self.device, class_name="android.view.View", description="Continue"):
+            self.device(className="android.view.View", description="Continue").click()
+            self.delay()
+
 
         # Select values
         values = [
@@ -602,64 +690,58 @@ class BumbleRegistration:
         self.device(className="android.view.View", description="Continue").click()
         self.delay()
 
+
     def complete_profile_setup(self):
         """Complete the profile setup process."""
         print("Starting profile setup process...")
 
+        # Skip race selection
         print("Attempting to skip race selection...")
-        self.device(resourceId="com.bumble.app:id/reg_footer_label", text="Skip").click()
-        self.delay()
+        if wait_for_element(self.device, resource_id="com.bumble.app:id/reg_footer_label", text="Skip"):
+            self.device(resourceId="com.bumble.app:id/reg_footer_label", text="Skip").click()
+            self.delay()
 
+        # Drinking habits selection
         print("Starting drinking habits selection...")
         habits = ["Yes, I drink", "I drink sometimes", "I rarely drink", "No, I don't drink"]
         selected_habit = random.choice(habits)
         print(f"Attempting to select habit: {selected_habit}")
         partial_map = {
-            "Yes, I drink": "Yes, I",  # or "Yes, I drink"
+            "Yes, I drink": "Yes, I",
             "I drink sometimes": "sometimes",
             "I rarely drink": "rarely",
-            "No, I don't drink": "don",  # catches "don’t" or "don't"
+            "No, I don't drink": "don"
         }
 
-        # Then do:
         self.device(
             className="android.widget.RadioButton",
             descriptionContains=partial_map[selected_habit]
         ).click()
         self.delay()
 
+        # Dump current UI elements
         print("Dumping current UI elements before smoking selection...")
         os.system('adb shell uiautomator dump /sdcard/window_dump.xml')
         os.system('adb pull /sdcard/window_dump.xml')
         print("UI dump completed")
 
+        # Smoking preference selection
         print("Attempting to select smoking preference...")
-        smoking_button = self.device(
-            className="android.widget.RadioButton",
-            description="No, I don’t smoke"  # Notice the curly apostrophe
-        )
+        if wait_for_element(self.device, class_name="android.widget.RadioButton", description="No, I don’t smoke"):
+            self.device(className="android.widget.RadioButton", description="No, I don’t smoke").click()
+            self.delay()
 
-        if smoking_button.exists:
-            print("Found smoking button, clicking...")
-            smoking_button.click()
-        else:
-            print("WARNING: Smoking button not found!")
-            # Print all RadioButtons on screen to see what's available
-            radio_buttons = self.device(className="android.widget.RadioButton")
-            for i in range(radio_buttons.count):
-                button = radio_buttons[i]
-                print(f"Button {i + 1}: description='{button.info.get('contentDescription')}', text='{button.info.get('text')}'")
-            
-            raise Exception("Could not find smoking preference button")
-        self.delay()
-        
-        self.device(className="android.view.View", description="Continue").click()
-        self.delay()
+        # Continue after smoking selection
+        print("Clicking 'Continue' after smoking selection...")
+        if wait_for_element(self.device, class_name="android.view.View", description="Continue"):
+            self.device(className="android.view.View", description="Continue").click()
+            self.delay()
 
-        # Handle kids questions
+        # Kids questions
         print("Handling kids questions...")
-        self.device(className="android.widget.RadioButton", description="Don’t have kids").click()
-        self.delay()
+        if wait_for_element(self.device, class_name="android.widget.RadioButton", description="Don’t have kids"):
+            self.device(className="android.widget.RadioButton", description="Don’t have kids").click()
+            self.delay()
 
         choices = ["Open to kids", "Want kids"]
         selected_choice = random.choice(choices)
@@ -669,26 +751,30 @@ class BumbleRegistration:
         self.device(className="android.view.View", description="Continue").click()
         self.delay()
 
-        # 1. "What's important in your life?"
+        # Continue after kids questions
+        if wait_for_element(self.device, class_name="android.view.View", description="Continue"):
+            self.device(className="android.view.View", description="Continue").click()
+            self.delay()
+
+        # What's important in your life?
         if self.device(textContains="important in your life").exists:
             print("Skipping 'What’s important in your life?' screen...")
             self.device(text="Skip").click()
             self.delay()
 
-        # 2. "How about causes and communities?"
-        if self.device(text="How about causes and communities?").exists:
-            print("Skipping 'How about causes and communities?' screen...")
+        # How about causes and communities?
+        print("Skipping 'How about causes and communities?' screen...")
+        if wait_for_element(self.device, text="How about causes and communities?"):
             self.device(text="Skip").click()
             self.delay()
-        # 3. "What's it like to date you?"
+
+        # What's it like to date you?
         if self.device(textContains="like to date you").exists:
             print("Skipping 'What’s it like to date you?' screen...")
             self.device(text="Skip").click()
             self.delay()
 
-
-
-        # After skipping all that, you can proceed to the next part (e.g., setup_photos)
+        # Move on to photo upload
         print("Now moving on to photo upload...")
         self.setup_photos()
 
@@ -788,32 +874,37 @@ class BumbleRegistration:
                 print(f"Error clicking save button: {str(e)}")
                 if attempt < max_retries - 1:
                     time.sleep(retry_delay)
+        
+        # Continue after photos
+        print("Clicking 'Continue' after photos...")
+        if wait_for_element(self.device, class_name="android.widget.Button",
+                            resource_id="com.bumble.app:id/reg_footer_button", description="Continue"):
+            self.device(className="android.widget.Button", resourceId="com.bumble.app:id/reg_footer_button",
+                        description="Continue").click()
+            self.delay()
 
     def finish_registration(self):
-        """Complete the final registration steps."""
-        # Continue after photos
-        self.device(className="android.widget.Button",
-                   resourceId="com.bumble.app:id/reg_footer_button",
-                   description="Continue").click()
-        self.delay()
+        """Complete the final registration steps."""        
 
         # Skip opening move
-        self.device(className="android.widget.TextView",
-                    text="Skip").click()
-        self.delay()
+        print("Clicking 'Skip' on opening move...")
+        if wait_for_element(self.device, class_name="android.widget.TextView", text="Skip"):
+            self.device(className="android.widget.TextView", text="Skip").click()
+            self.delay()
 
-        # Click got it
-        if self.device(className="android.widget.TextView",
-                       text="Got it").exists:
-            self.device(className="android.widget.TextView",
-                        text="Got it").click()
+        # Click 'Got it'
+        print("Checking for 'Got it' button...")
+        if wait_for_element(self.device, class_name="android.widget.TextView", text="Got it"):
+            self.device(className="android.widget.TextView", text="Got it").click()
             self.delay()
 
         # Accept terms
-        self.device(className="android.widget.Button",
-                    text="I accept",
-                    resourceId="com.bumble.app:id/pledge_cta").click()
-        self.delay()
+        print("Clicking 'I accept' to accept terms...")
+        if wait_for_element(self.device, class_name="android.widget.Button", text="I accept",
+                            resource_id="com.bumble.app:id/pledge_cta"):
+            self.device(className="android.widget.Button", text="I accept",
+                        resourceId="com.bumble.app:id/pledge_cta").click()
+            self.delay()
 
     def run_registration_flow(self):
         """Execute the complete registration flow."""
@@ -846,8 +937,8 @@ class BumbleRegistration:
                 self.click_continue_buttons()
                 self.setup_profile_preferences()
                 self.fill_profile_details()
+                # Only call complete_profile_setup without setup_photos
                 self.complete_profile_setup()
-                self.setup_photos()
                 self.finish_registration()
                 return True
             else:
@@ -859,7 +950,7 @@ def main():
         # Initialize and setup cloud phone
         cloud_phone = CloudPhoneManager()
         creation_response = cloud_phone.create_profile()
-        
+
         if not cloud_phone.profile_id:
             print("Failed to create profile.")
             return
@@ -877,33 +968,33 @@ def main():
 
         # Add delay before enabling ADB
         print("Waiting 10 seconds before enabling ADB...")
-        time.sleep(10)
+        time.sleep(3)
 
         # Enable ADB and get connection info
         print("Enabling ADB...")
         cloud_phone.enable_adb()
-        
+
         print("Getting ADB info...")
         adb_info = cloud_phone.get_adb_info()
-        
+
         if not adb_info:
             raise Exception("Failed to get ADB info")
-            
+
         print("ADB info retrieved successfully")
-        
+
         # Create ADB address and start Bumble registration
         adb_address = f"{adb_info['ip']}:{adb_info['port']}"
         print(f"Connecting to device at: {adb_address}")
-        
+
         # Add delay before starting Bumble registration
-# Add longer delay before device connection
+        # Add longer delay before device connection
         print("Waiting 15 seconds for device to be fully ready...")
-        time.sleep(15)
+        time.sleep(5)
         print("Starting Bumble app...")
         cloud_phone.start_bumble()
         print("Waiting for Bumble to initialize...")
-        time.sleep(10)
-        
+        time.sleep(5)
+
         try:
             bumble = BumbleRegistration(adb_address, adb_info['password'])  # Pass the password
         except Exception as e:
@@ -912,10 +1003,10 @@ def main():
             os.system(f"adb connect {adb_address}")
             time.sleep(5)
             bumble = BumbleRegistration(adb_address, adb_info['password'])  # Pass the password here too
-        
+
         # Run the registration process
         success = bumble.run_registration_flow()
-        
+
         if success:
             print("Bumble registration completed successfully!")
         else:
@@ -928,6 +1019,6 @@ def main():
         print("Full error details:")
         print(traceback.format_exc())
 
+
 if __name__ == "__main__":
     main()
-
