@@ -10,6 +10,14 @@ from concurrent.futures import ThreadPoolExecutor
 from typing import Optional, Dict, Any
 import threading
 
+# Swipe Settings
+SWIPE_SETTINGS = {
+    "total_swipes": 10,     # Total number of swipes to perform
+    "right_swipe_rate": 30, # Percentage of right swipes (0-100)
+    "swipe_delay_min": 1,   # Minimum delay between swipes in seconds
+    "swipe_delay_max": 3,   # Maximum delay between swipes in seconds
+}
+
 proxy_file_lock = threading.Lock()
 adb_lock = threading.Lock()
 
@@ -976,6 +984,80 @@ class BumbleRegistration:
             else:
                 self.retry_with_new_number()
 
+class BumbleSwiper:
+    def __init__(self, device):
+        """Initialize swiper with the existing device connection."""
+        self.device = device
+        print("BumbleSwiper initialized")
+
+    def delay(self, seconds: float = 2.5):
+        """Add a delay between actions."""
+        time.sleep(seconds)
+
+    def start_swiping_session(self):
+        """Begin a swiping session with configured settings."""
+        print("\nStarting automated swiping session...")
+        total_swipes = SWIPE_SETTINGS["total_swipes"]
+        right_swipe_rate = SWIPE_SETTINGS["right_swipe_rate"] / 100
+        
+        # Calculate number of right swipes based on rate
+        num_right_swipes = int(total_swipes * right_swipe_rate)
+        num_left_swipes = total_swipes - num_right_swipes
+        
+        # Create list of swipe directions and shuffle it
+        swipe_sequence = (["right"] * num_right_swipes) + (["left"] * num_left_swipes)
+        random.shuffle(swipe_sequence)
+        
+        print(f"Planning to perform {total_swipes} swipes ({num_right_swipes} right, {num_left_swipes} left)")
+        
+        successful_swipes = 0
+        for i, direction in enumerate(swipe_sequence, 1):
+            try:
+                # Wait for profile card to be visible
+                if wait_for_element(self.device, resource_id="com.bumble.app:id/user_card", timeout=10):
+                    # Perform swipe action
+                    self.swipe_profile(direction)
+                    successful_swipes += 1
+                    
+                    # Random delay between swipes
+                    delay = random.uniform(
+                        SWIPE_SETTINGS["swipe_delay_min"],
+                        SWIPE_SETTINGS["swipe_delay_max"]
+                    )
+                    print(f"Swipe {i}/{total_swipes}: {direction} (waiting {delay:.1f}s)")
+                    time.sleep(delay)
+                else:
+                    print("No profile card found to swipe")
+                    break
+                    
+            except Exception as e:
+                print(f"Error during swipe {i}: {str(e)}")
+                break
+
+        print(f"\nSwiping session completed: {successful_swipes} successful swipes")
+        return successful_swipes > 0
+
+    def swipe_profile(self, direction: str):
+        """Perform swipe action in specified direction."""
+        screen_size = self.device.window_size()
+        center_x = screen_size[0] // 2
+        center_y = screen_size[1] // 2
+        
+        if direction == "right":
+            # Swipe right (like)
+            self.device.swipe(
+                center_x, center_y,
+                screen_size[0] - 100, center_y,
+                duration=0.2
+            )
+        else:
+            # Swipe left (pass)
+            self.device.swipe(
+                center_x, center_y,
+                100, center_y,
+                duration=0.2
+            )
+
 def main():
     """Main function to execute the entire workflow."""
     try:
@@ -1019,7 +1101,6 @@ def main():
         print(f"Connecting to device at: {adb_address}")
 
         # Add delay before starting Bumble registration
-        # Add longer delay before device connection
         print("Waiting 15 seconds for device to be fully ready...")
         time.sleep(5)
         print("Starting Bumble app...")
@@ -1041,8 +1122,14 @@ def main():
 
         if success:
             print("Bumble registration completed successfully!")
+            print("Initializing swiping session...")
+            time.sleep(5)  # Wait for app to stabilize
+            
+            # Start swiping session
+            swiper = BumbleSwiper(bumble.device)  # Reuse the existing device connection
+            swiper.start_swiping_session()
         else:
-            print("Bumble registration failed.")
+            print("Registration failed.")
 
     except Exception as e:
         print(f"Error during automation process: {str(e)}")
@@ -1050,7 +1137,6 @@ def main():
         import traceback
         print("Full error details:")
         print(traceback.format_exc())
-
 
 if __name__ == "__main__":
     from concurrent.futures import ThreadPoolExecutor
