@@ -74,7 +74,7 @@ class DynamicBumbleFlow:
             
 
             "retry_call": {
-                "identifiers": {"resource_id": "com.bumble.app:id/reg_footer_label"},
+                "identifiers": {"text": "didn't get a code"},
                 "action": self.bumble.retry_with_new_number
             },
             
@@ -723,7 +723,7 @@ class BumbleRegistration:
             time.sleep(0.1)
         print("Clicking 'Next' button...")
         self.device(resourceId="com.bumble.app:id/reg_footer_button").click()
-        self.delay()
+        self.delay(5)
 
     def enable_location_and_notifications(self):
         """Enable location and notifications."""
@@ -787,9 +787,20 @@ class BumbleRegistration:
                 self.device.shell(f"input text {digit}")
                 time.sleep(0.1)
             self.delay(1)
-        print("Clicking 'Next' button...")
-        self.device(resourceId="com.bumble.app:id/reg_footer_button").click()
-        self.delay()
+        print("Clicking arrow button...")
+        try:
+            # Try to find the arrow button by its class (it's likely an ImageButton or ImageView)
+            self.device(className="android.widget.ImageButton").click()
+        except:
+            try:
+                # Try by resource ID if it has a specific one for the arrow
+                self.device(description="Continue").click()
+            except:
+                # As a last resort, try clicking where the arrow button is
+                # You might need to adjust these coordinates based on your screen size
+                self.device.click(900, 1800)  # Adjust these x,y coordinates to match where the arrow appears
+        
+        self.delay(2)
 
     def click_continue_buttons(self):
         """Click various continue buttons."""
