@@ -17,10 +17,10 @@ class DynamicBumbleFlow:
         """Find text in XML hierarchy"""
         if isinstance(text_substring, list):
             return any(self.find_text_in_xml(root, single_text) for single_text in text_substring)
-        
+
         # Convert the search string to lowercase for case-insensitive comparison
         text_substring = text_substring.lower()
-        
+
         for node in root.iter():
             node_text = (node.attrib.get('text') or "").lower()
             content_desc = (node.attrib.get('content-desc') or "").lower()
@@ -35,6 +35,7 @@ class DynamicBumbleFlow:
             if resource_id in node_res_id:
                 return True
         return False
+
     def __init__(self, device: u2.Device, bumble_registration: "BumbleRegistration"):
         self.device = device
         self.bumble = bumble_registration  # This is our BumbleRegistration instance
@@ -65,24 +66,23 @@ class DynamicBumbleFlow:
                 "identifiers": {
                     "text": ["Verify your number", "Enter code", "Verification code", "Enter the code"]
                 },
-                "action": lambda: self.bumble.enter_sms_code_and_continue(self.bumble.check_sms_code()) if self.bumble.check_sms_code() else None
+                "action": lambda: self.bumble.enter_sms_code_and_continue(
+                    self.bumble.check_sms_code()) if self.bumble.check_sms_code() else None
             },
             "get_code": {
                 "identifiers": {"text": "Get a code instead"},
                 "action": self.bumble.click_get_code_instead
             },
-            
 
             "retry_call": {
                 "identifiers": {"text": "Didn't get a code?"},
                 "action": self.bumble.retry_with_new_number
             },
-            
 
             "name_entry": {
                 "identifiers": {
                     "text": "Your first name"
-                    },
+                },
                 "action": self.bumble.enter_personal_info
             },
             "location_services": {
@@ -94,31 +94,38 @@ class DynamicBumbleFlow:
             },
             "gender_selection": {
                 "identifiers": {
-            
+
                     "text": "Woman"
                 },
                 "action": self.bumble.setup_profile_preferences
             },
             "gender_selection": {
-                    "identifiers": {
-                        "text": "Which gender best describes you?"
-                    },
-                    "action": self.bumble.select_gender
+                "identifiers": {
+                    "text": "Which gender best describes you?"
                 },
+                "action": self.bumble.select_gender
+            },
 
             "dating_preference": {
                 "identifiers": {
-                        "text": "I'm open to dating everyone"
-                    },
-                    "action": self.bumble.select_dating_preference
+                    "text": "I'm open to dating everyone"
                 },
+                "action": self.bumble.select_dating_preference
+            },
 
-             "relationship_goal": {
-                    "identifiers": {
-                        "text": ["A long-term relationship", "Fun, casual dates", "Intimacy, without commitment"]
-                    },
-                    "action": self.bumble.select_relationship_goal
+            "relationship_goal": {
+                "identifiers": {
+                    "text": ["A long-term relationship", "Fun, casual dates", "Intimacy, without commitment"]
                 },
+                "action": self.bumble.select_relationship_goal
+            },
+
+            "five_things": {
+                "identifiers": {
+                    "text": "Choose 5 things you're really into"
+                },
+                "action": self.bumble.select_five_things
+            },
 
             "dating_preference": {
                 "identifiers": {
@@ -126,67 +133,64 @@ class DynamicBumbleFlow:
                 },
                 "action": self.bumble.select_dating_preference
             },
-            "Value":{
+            "five_things": {
                 "identifiers": {
-                        "text": "Value"
-                    },
-                    "action": self.bumble.select_values
+                    "text": "Choose 5 things"
+                },
+                "action": self.bumble.select_five_things
             },
-            
-            "relationship_goals":{
+            "Value": {
                 "identifiers": {
-                        "text": "It's your dating journey,"
-                    },
-                    "action": self.bumble.select_relationship_goal
-            },
-            "next_button":{
-                "identifiers": {
-                        "text": ["Shown as:", "What brings you to Bumble",]
-                    },
-                    "action": self.bumble.handle_next_buttons
+                    "text": "Ambition"
+                },
+                "action": self.bumble.select_values
             },
 
-            
-            "skip": {
-                    "identifiers": {
-                        "text": ["Can we get your email?", "ethnicity?", "What's important in your life?","height", "race","How about causes and communities",]
-                    },
-                    "action": self.bumble.Skip
+            "relationship_goals": {
+                "identifiers": {
+                    "text": "It's your dating journey,"
                 },
-    
+                "action": self.bumble.select_relationship_goal
+            },
+            "next_button": {
+                "identifiers": {
+                    "text": ["Shown as:", "What brings you to Bumble", ]
+                },
+                "action": self.bumble.handle_next_buttons
+            },
+
+            "skip": {
+                "identifiers": {
+                    "text": ["Write your own Opening Move","Religion", "Can we get your email?", "ethnicity?", "important in your life", "height", "like to date you",
+                             "How about causes and communities", ]
+                },
+                "action": self.bumble.Skip
+            },
+
             "drinking_habits": {
                 "identifiers": {
                     "text": "Yes, I drink"
                 },
                 "action": self.bumble.select_habits
             },
-        
-         "kids_questions": {
-            "identifiers": {
-                "text": "Do you have kids or family plans?"
-            },
-            "action": self.bumble.handle_kids_questions
-        },
-        
-          "kids_questions": {
-            "identifiers": {
-                "text": "Don't have kids"
-            },
-            "action": self.bumble.handle_kids_questions
-        },
-        
-        
-            
-        "photo_upload": {
+
+            "kids_questions": {
                 "identifiers": {
-                    
+                    "text": "Have kids"
+                },
+                "action": self.bumble.handle_kids_questions
+            },
+
+            "photo_upload": {
+                "identifiers": {
+
                     "text": "photo"
                 },
                 "action": self.bumble.setup_photos
             },
             "finish": {
-        
-        "identifiers": {
+
+                "identifiers": {
                     "text": "I accept",
                     "resource_id": "com.bumble.app:id/pledge_cta"
                 },
@@ -199,7 +203,6 @@ class DynamicBumbleFlow:
             screen_name = self.identify_current_screen()
             print(f"Current screen: {screen_name}")
 
-
             if screen_name in self.screen_actions:
                 # Regular screen handling
                 action = self.screen_actions[screen_name]["action"]
@@ -211,7 +214,7 @@ class DynamicBumbleFlow:
                     self.try_fallback_buttons()
             else:
                 self.try_fallback_buttons()
-    
+
     def identify_current_screen(self) -> str:
         xml = self.device.dump_hierarchy()
         root = ElementTree.fromstring(xml)
@@ -234,7 +237,7 @@ class DynamicBumbleFlow:
 
     def try_fallback_buttons(self):
         """Try common buttons when screen isn't recognized"""
-        common_buttons = [ "Continue", "Confirm", "OK", "Allow", "I accept", "Got it", "Change number"]
+        common_buttons = ["Continue", "Confirm", "OK", "Allow", "I accept", "Got it", "Change number"]
         for button_text in common_buttons:
             if self.device(text=button_text).exists:
                 self.device(text=button_text).click()
@@ -351,7 +354,6 @@ class CloudPhoneManager:
             "username": parts[2],
             "password": ":".join(parts[3:])  # Handles any extra parts in the password
         }
-
 
     def create_profile(self) -> Dict[str, Any]:
         """Create a cloud phone profile."""
@@ -573,8 +575,6 @@ class CloudPhoneManager:
                     raise Exception(f"Failed to start Bumble app: {response_data.get('msg')}")
                 return
         print("Bumble app is not installed on this device.")
-    
-    
 
 
 class BumbleRegistration:
@@ -617,7 +617,7 @@ class BumbleRegistration:
     def delay(self, seconds: float = 2.5):
         """Add a delay between actions."""
         time.sleep(seconds)
-    
+
     def request_phone_number(self) -> Optional[str]:
         """Request a phone number from DaisySMS."""
         params = {
@@ -655,14 +655,14 @@ class BumbleRegistration:
 
             response = requests.get(DAISYSMS_BASE_URL, params=params)
             print(f"Checking SMS status: {response.text}")
-            
+
             if response.ok:
                 response_parts = response.text.split(':')
                 if len(response_parts) == 2 and response_parts[0] == "STATUS_OK":
                     code = response_parts[1]
                     print(f"SMS code received: {code}")
                     return code
-                
+
             time.sleep(2)  # Short delay between checks
 
         # After 30 seconds with no code
@@ -674,9 +674,8 @@ class BumbleRegistration:
                 self.device(textContains="get a code").click()
             except:
                 print("Could not find 'didn't get a code?' button")
-        
+
         return None
-    
 
         # UI Interaction Methods
 
@@ -701,7 +700,7 @@ class BumbleRegistration:
             self.device.shell(f"input text {digit}")
             time.sleep(0.1)
         self.delay()
-        
+
         print("Clicking 'Next' button...")
         self.device(resourceId="com.bumble.app:id/reg_footer_button").click()
         self.delay()
@@ -798,7 +797,7 @@ class BumbleRegistration:
         for char in name:
             self.device.shell(f"input text {char}")
             time.sleep(0.05)  # Reduced from 0.1
-        
+
         # Enter DOB
         year = random.choice(["2000", "2001", "2002"])
         month = f"{random.randint(1, 12):02}"
@@ -837,7 +836,7 @@ class BumbleRegistration:
         if wait_for_element(self.device, class_name="android.widget.TextView", text="Confirm"):
             self.device(className="android.widget.TextView", text="Confirm").click()
             self.delay()
-    
+
     def click_next_button(self):
         """Click the next/continue button."""
         print("Clicking next button...")
@@ -851,9 +850,9 @@ class BumbleRegistration:
             except:
                 # Last resort - try clicking where the arrow appears
                 # You might need to adjust these coordinates based on your screen
-                self.device.click(900, 1800)  
+                self.device.click(900, 1800)
         self.delay()
-    
+
     def select_gender(self):
         """Select gender preference."""
         print("Selecting gender...")
@@ -861,18 +860,49 @@ class BumbleRegistration:
             self.device(className="android.widget.TextView", text="Woman").click()
             self.delay()
 
-        # Using the same pattern as relationship_goal for Continue button
+        # Try multiple methods to click the continue button
         print("Clicking Continue after selecting gender...")
-        if wait_for_element(self.device, class_name="android.view.View", description="Continue"):
-            self.device(className="android.view.View", description="Continue").click()
-            self.delay()
+        try:
+            # Try to find the arrow button by its class and index (bottom right corner)
+            if self.device(className="android.widget.ImageButton").exists:
+                self.device(className="android.widget.ImageButton").click()
+            elif self.device(className="android.widget.Button", description="Continue").exists:
+                self.device(className="android.widget.Button", description="Continue").click()
+            elif self.device(className="android.view.View", description="Continue").exists:
+                self.device(className="android.view.View", description="Continue").click()
+            else:
+                # If no button is found, try clicking the bottom right corner
+                screen_size = self.device.window_size()
+                x = screen_size[0] - 50  # 50 pixels from the right
+                y = screen_size[1] - 50  # 50 pixels from the bottom
+                self.device.click(x, y)
+            print("Continue button clicked successfully")
+        except Exception as e:
+            print(f"Error clicking continue button: {str(e)}")
+        self.delay()
 
     def handle_next_buttons(self):
         """Handle clicking next buttons for additional screens."""
-        print("Clicking Continue on additional screen...")
-        if wait_for_element(self.device, class_name="android.view.View", description="Continue"):
-            self.device(className="android.view.View", description="Continue").click()
-            self.delay()
+                # Try multiple methods to click the continue button
+        print("Clicking Continue after selecting gender...")
+        try:
+            # Try to find the arrow button by its class and index (bottom right corner)
+            if self.device(className="android.widget.ImageButton").exists:
+                self.device(className="android.widget.ImageButton").click()
+            elif self.device(className="android.widget.Button", description="Continue").exists:
+                self.device(className="android.widget.Button", description="Continue").click()
+            elif self.device(className="android.view.View", description="Continue").exists:
+                self.device(className="android.view.View", description="Continue").click()
+            else:
+                # If no button is found, try clicking the bottom right corner
+                screen_size = self.device.window_size()
+                x = screen_size[0] - 50  # 50 pixels from the right
+                y = screen_size[1] - 50  # 50 pixels from the bottom
+                self.device.click(x, y)
+            print("Continue button clicked successfully")
+        except Exception as e:
+            print(f"Error clicking continue button: {str(e)}")
+        self.delay()
 
     def skip_optional_sections(self):
         """Skip optional sections."""
@@ -880,6 +910,46 @@ class BumbleRegistration:
         if wait_for_element(self.device, resource_id="com.bumble.app:id/reg_footer_label", text="Skip"):
             self.device(resourceId="com.bumble.app:id/reg_footer_label", text="Skip").click()
             self.delay()
+    
+    def select_five_things(self):
+        """Select 5 interests from the available options."""
+        print("Selecting 5 things you're really into...")
+        
+        # List of possible interests with their partial matches
+        interests = {
+            "Vegetarian": "Vegetarian",
+            "Horror": "Horror",
+            "Hiking trips": "Hiking",
+            "Writing": "Writing",
+            "Crafts": "Crafts",
+            "Coffee": "Coffee",
+            "Art": "Art",
+            "Museums & galleries": "Museums",
+            "Festivals": "Festivals",
+            "Baking": "Baking",
+            "Wine": "Wine",
+            "Camping": "Camping",
+            "Exploring new cities": "Exploring",
+            "LGBTQ+ rights": "LGBTQ",
+            "R&B": "R&B"
+        }
+        
+        # Select exactly 5 random interests
+        selected_keys = random.sample(list(interests.keys()), 5)
+        
+        # Click each selected interest using the pattern that works
+        for interest in selected_keys:
+            print(f"Attempting to select: {interest}")
+            self.device(
+                className="android.widget.CheckBox",
+                descriptionContains=interests[interest]
+            ).click()
+            self.delay(0.5)
+
+        # Click the arrow button to continue
+        print("Clicking Continue after selections...")
+        self.device(className="android.widget.ImageButton").click()
+        self.delay()
 
     def select_dating_preference(self):
         """Select dating preference."""
@@ -888,19 +958,26 @@ class BumbleRegistration:
             self.device(className="android.widget.TextView", text="Men").click()
             self.delay()
 
-        # Using the same pattern as others for Continue button
-        print("Clicking Continue after selecting preference...")
-        if wait_for_element(self.device, class_name="android.view.View", description="Continue"):
-            self.device(className="android.view.View", description="Continue").click()
-            self.delay()
-
-        if wait_for_element(self.device, 
-                        resource_id="com.bumble.app:id/reg_footer_button",
-                        class_name="android.widget.Button"):
-            self.device(resourceId="com.bumble.app:id/reg_footer_button", 
-                    className="android.widget.Button").click()
-            self.delay()
-        self.click_next_button()
+                # Try multiple methods to click the continue button
+        print("Clicking Continue after selecting gender...")
+        try:
+            # Try to find the arrow button by its class and index (bottom right corner)
+            if self.device(className="android.widget.ImageButton").exists:
+                self.device(className="android.widget.ImageButton").click()
+            elif self.device(className="android.widget.Button", description="Continue").exists:
+                self.device(className="android.widget.Button", description="Continue").click()
+            elif self.device(className="android.view.View", description="Continue").exists:
+                self.device(className="android.view.View", description="Continue").click()
+            else:
+                # If no button is found, try clicking the bottom right corner
+                screen_size = self.device.window_size()
+                x = screen_size[0] - 50  # 50 pixels from the right
+                y = screen_size[1] - 50  # 50 pixels from the bottom
+                self.device.click(x, y)
+            print("Continue button clicked successfully")
+        except Exception as e:
+            print(f"Error clicking continue button: {str(e)}")
+        self.delay()
 
     def select_relationship_goal(self):
         """Select relationship goal."""
@@ -1009,11 +1086,11 @@ class BumbleRegistration:
 
         self.device(className="android.view.View", description="Continue").click()
         self.delay()
-    
+
     def select_interests(self):
         """Select random interests from the list."""
         print("Selecting interests...")
-        
+
         # Scroll to see all options
         self.device(scrollable=True).scroll.toEnd()
         self.delay()
@@ -1023,7 +1100,7 @@ class BumbleRegistration:
             "Cats", "Dogs", "Wine", "Horror", "Baking",
             "Coffee", "Dancing", "Exploring new cities"
         ]
-        
+
         # Select 3-5 random interests
         selected_interests = random.sample(interests, random.randint(3, 5))
         for interest in selected_interests:
@@ -1036,17 +1113,17 @@ class BumbleRegistration:
         if wait_for_element(self.device, class_name="android.view.View", description="Continue"):
             self.device(className="android.view.View", description="Continue").click()
             self.delay()
-    
+
     def select_values(self):
         """Select random values from the list."""
         print("Selecting values...")
-        
+
         # List of possible values
         values = [
             "Ambition", "Confidence", "Empathy", "Generosity",
             "Humor", "Kindness", "Leadership", "Loyalty"
         ]
-        
+
         # Select 2-3 random values
         selected_values = random.sample(values, random.randint(2, 3))
         for value in selected_values:
@@ -1059,22 +1136,39 @@ class BumbleRegistration:
         if wait_for_element(self.device, class_name="android.view.View", description="Continue"):
             self.device(className="android.view.View", description="Continue").click()
             self.delay()
+
     def Skip(self):
-        """Skip the race selection screen."""
-        print("Attempting to skip race selection...")
-        if wait_for_element(self.device, resource_id="com.bumble.app:id/reg_footer_label", text="Skip"):
-            self.device(resourceId="com.bumble.app:id/reg_footer_label", text="Skip").click()
-            self.delay()
+        """Skip the current screen."""
+        print("Attempting to skip screen...")
+        
+        # Try multiple skip button variations
+        try:
+            # Try the footer skip button
+            if self.device(resourceId="com.bumble.app:id/reg_footer_label", text="Skip").exists:
+                self.device(resourceId="com.bumble.app:id/reg_footer_label", text="Skip").click()
+                print("Clicked footer skip button")
+            # Try just text "Skip"
+            elif self.device(text="Skip").exists:
+                self.device(text="Skip").click()
+                print("Clicked text skip button")
+            # Try skip by class and text
+            elif self.device(className="android.widget.TextView", text="Skip").exists:
+                self.device(className="android.widget.TextView", text="Skip").click()
+                print("Clicked TextView skip button")
+            else:
+                print("No skip button found")
+        except Exception as e:
+            print(f"Error during skip: {e}")
+            
+        self.delay()
 
     def select_habits(self):
         """Select drinking and smoking habits."""
-        print("Starting habits selection...")
-        
-        # Select drinking habit
+        # Drinking habits selection
+        print("Starting drinking habits selection...")
         habits = ["Yes, I drink", "I drink sometimes", "I rarely drink", "No, I don't drink"]
         selected_habit = random.choice(habits)
-        print(f"Selecting drinking habit: {selected_habit}")
-        
+        print(f"Attempting to select habit: {selected_habit}")
         partial_map = {
             "Yes, I drink": "Yes, I",
             "I drink sometimes": "sometimes",
@@ -1088,39 +1182,67 @@ class BumbleRegistration:
         ).click()
         self.delay()
 
-        # Select smoking preference
-        print("Selecting smoking preference...")
-        if wait_for_element(self.device, class_name="android.widget.RadioButton", 
-                        description="No, I don't smoke"):
-            self.device(className="android.widget.RadioButton", 
-                    description="No, I don't smoke").click()
-            self.delay()
+        # Smoking habits selection using same pattern as drinking
+        print("Starting smoking selection...")
+        smoking_habits = ["Yes, I smoke", "I smoke sometimes", "No, I don't smoke", "I'm trying to quit"]
+        selected_smoking = random.choice(smoking_habits)
+        print(f"Attempting to select smoking habit: {selected_smoking}")
+        smoking_map = {
+            "Yes, I smoke": "Yes, I",
+            "I smoke sometimes": "sometimes",
+            "No, I don't smoke": "don't",
+            "I'm trying to quit": "trying"
+        }
 
-        # Click Continue after both selections
-        print("Clicking 'Continue' after selecting habits...")
+        self.device(
+            className="android.widget.RadioButton",
+            descriptionContains=smoking_map[selected_smoking]
+        ).click()
+        self.delay()
+
+        # Continue after smoking selection
+        print("Clicking 'Continue' after smoking selection...")
         if wait_for_element(self.device, class_name="android.view.View", description="Continue"):
             self.device(className="android.view.View", description="Continue").click()
             self.delay()
 
     def handle_kids_questions(self):
-        """Handle questions about kids."""
-        print("Handling kids questions...")
-        if wait_for_element(self.device, class_name="android.widget.RadioButton", 
-                        description="Don't have kids"):
-            self.device(className="android.widget.RadioButton", 
-                    description="Don't have kids").click()
-            self.delay()
+        """Handle kids questions."""
+        print("Starting kids questions...")
+        # First question about having kids
+        kids_status = ["Don't have kids", "Have kids"]
+        selected_status = random.choice(kids_status)
+        print(f"Attempting to select kids status: {selected_status}")
+        status_map = {
+            "Don't have kids": "Don't",
+            "Have kids": "Have"
+        }
 
-        choices = ["Open to kids", "Want kids"]
-        selected_choice = random.choice(choices)
-        print(f"Selecting kids preference: {selected_choice}")
-        self.device(className="android.widget.RadioButton", 
-                    description=selected_choice).click()
-        self.delay()
-        
-        self.device(className="android.view.View", description="Continue").click()
+        self.device(
+            className="android.widget.RadioButton",
+            descriptionContains=status_map[selected_status]
+        ).click()
         self.delay()
 
+        # Second question about future kids
+        future_choices = ["Open to kids", "Want kids", "Don't want kids", "Not sure"]
+        selected_choice = random.choice(future_choices)
+        print(f"Selecting future kids preference: {selected_choice}")
+        future_map = {
+            "Open to kids": "Open",
+            "Want kids": "Want",
+            "Don't want kids": "Don't want",
+            "Not sure": "Not sure"
+        }
+
+        self.device(
+            className="android.widget.RadioButton",
+            descriptionContains=future_map[selected_choice]
+        ).click()
+        self.delay()
+
+        # Continue after selections
+        print("Clicking 'Continue' after kids questions...")
         if wait_for_element(self.device, class_name="android.view.View", description="Continue"):
             self.device(className="android.view.View", description="Continue").click()
             self.delay()
@@ -1442,7 +1564,7 @@ def main():
             print(f"Error initializing BumbleRegistration: {str(e)}")
             print("Trying to reset ADB connection...")
             os.system(f"adb connect {adb_address}")
-            time.sleep(5)
+            time.sleep(2)
             bumble = BumbleRegistration(adb_address, adb_info['password'])  # Pass the password here too
 
         # Run the registration process
