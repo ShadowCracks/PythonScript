@@ -11,6 +11,48 @@ from typing import Optional, Dict, Any
 from xml.etree import ElementTree
 from typing import Union, List
 
+class SwipeHandler:
+    def __init__(self, device: u2.Device):
+        self.device = device
+        
+    def perform_swipe(self, direction: str):
+        """Perform a single swipe in the specified direction"""
+        screen_size = self.device.window_size()
+        center_x = screen_size[0] // 2
+        center_y = screen_size[1] // 2
+        
+        swipe_coordinates = {
+            'left': {
+                'start_x': center_x,
+                'start_y': center_y,
+                'end_x': center_x - (screen_size[0] * 0.8),
+                'end_y': center_y
+            },
+            'right': {
+                'start_x': center_x,
+                'start_y': center_y,
+                'end_x': center_x + (screen_size[0] * 0.8),
+                'end_y': center_y
+            }
+        }
+        
+        # Add randomness to coordinates and duration
+        start_x = swipe_coordinates[direction]['start_x'] + random.uniform(-50, 50)
+        start_y = swipe_coordinates[direction]['start_y'] + random.uniform(-50, 50)
+        end_x = swipe_coordinates[direction]['end_x'] + random.uniform(-50, 50)
+        end_y = swipe_coordinates[direction]['end_y'] + random.uniform(-50, 50)
+        duration = random.uniform(0.2, 0.4)
+        
+        self.device.swipe(
+            fx=start_x,
+            fy=start_y,
+            tx=end_x,
+            ty=end_y,
+            duration=duration
+        )
+        
+        # Random delay between swipes
+        time.sleep(random.uniform(1, 3))
 
 class DynamicBumbleFlow:
     def find_text_in_xml(self, root, text_substring: Union[str, List[str]]) -> bool:
@@ -40,6 +82,13 @@ class DynamicBumbleFlow:
         self.device = device
         self.bumble = bumble_registration  # This is our BumbleRegistration instance
         self.finished = False
+        
+        # Add swipe configuration
+        self.swipe_config = {
+            'total_swipes': 10,
+            'right_swipe_percentage': 30,
+            'swipes_completed': 0
+        }
 
         # This maps screens to BumbleRegistration methods
         self.screen_actions = {
@@ -61,7 +110,6 @@ class DynamicBumbleFlow:
                 "identifiers": {"text": "We need to verify your number"},
                 "action": self.bumble.click_ok_button
             },
-
             "sms_code": {
                 "identifiers": {
                     "text": ["Verify your number", "Enter code", "Verification code", "Enter the code"]
@@ -73,12 +121,10 @@ class DynamicBumbleFlow:
                 "identifiers": {"text": "Get a code instead"},
                 "action": self.bumble.click_get_code_instead
             },
-
             "retry_call": {
                 "identifiers": {"text": "Didn't get a code?"},
                 "action": self.bumble.retry_with_new_number
             },
-
             "name_entry": {
                 "identifiers": {
                     "text": "Your first name"
@@ -94,48 +140,25 @@ class DynamicBumbleFlow:
             },
             "gender_selection": {
                 "identifiers": {
-
-                    "text": "Woman"
-                },
-                "action": self.bumble.setup_profile_preferences
-            },
-            "gender_selection": {
-                "identifiers": {
                     "text": "Which gender best describes you?"
                 },
                 "action": self.bumble.select_gender
             },
-
             "dating_preference": {
                 "identifiers": {
-                    "text": "I'm open to dating everyone"
+                    "text": ["I'm open to dating everyone", "Who would you like to meet?"]
                 },
                 "action": self.bumble.select_dating_preference
             },
-
             "relationship_goal": {
                 "identifiers": {
                     "text": ["A long-term relationship", "Fun, casual dates", "Intimacy, without commitment"]
                 },
                 "action": self.bumble.select_relationship_goal
             },
-
             "five_things": {
                 "identifiers": {
-                    "text": "Choose 5 things you're really into"
-                },
-                "action": self.bumble.select_five_things
-            },
-
-            "dating_preference": {
-                "identifiers": {
-                    "text": "Who would you like to meet?"  # Updated identifier
-                },
-                "action": self.bumble.select_dating_preference
-            },
-            "five_things": {
-                "identifiers": {
-                    "text": "Choose 5 things"
+                    "text": ["Choose 5 things you're really into", "Choose 5 things"]
                 },
                 "action": self.bumble.select_five_things
             },
@@ -145,7 +168,6 @@ class DynamicBumbleFlow:
                 },
                 "action": self.bumble.select_values
             },
-
             "relationship_goals": {
                 "identifiers": {
                     "text": "It's your dating journey,"
@@ -154,49 +176,167 @@ class DynamicBumbleFlow:
             },
             "next_button": {
                 "identifiers": {
-                    "text": ["Shown as:", "What brings you to Bumble", ]
+                    "text": ["Shown as:", "What brings you to Bumble"]
                 },
                 "action": self.bumble.handle_next_buttons
             },
-
             "skip": {
                 "identifiers": {
-                    "text": ["Write your own Opening Move","Religion", "Can we get your email?", "ethnicity?", "important in your life", "height", "like to date you",
-                             "How about causes and communities", ]
+                    "text": ["Write your own Opening Move", "Religion", "Can we get your email?", "ethnicity?", 
+                            "important in your life", "height", "like to date you",
+                            "How about causes and communities"]
                 },
                 "action": self.bumble.Skip
             },
-
             "drinking_habits": {
                 "identifiers": {
                     "text": "Yes, I drink"
                 },
                 "action": self.bumble.select_habits
             },
-
             "kids_questions": {
                 "identifiers": {
                     "text": "Have kids"
                 },
                 "action": self.bumble.handle_kids_questions
             },
-
+            "swipe_screen": {
+                "identifiers": {
+                    "text": ["Keep on swiping", "we're learning what you like", "learning what you like",]
+                },
+                "action": self.handle_swiping
+            },
             "photo_upload": {
                 "identifiers": {
-
                     "text": "photo"
                 },
                 "action": self.bumble.setup_photos
             },
             "finish": {
-
                 "identifiers": {
                     "text": "I accept",
                     "resource_id": "com.bumble.app:id/pledge_cta"
                 },
                 "action": self.bumble.finish_registration
-            }
+            },
+            # Add new swiping screen detection
+            
         }
+
+    def handle_swiping(self):
+        """Handle the swiping screen with configured ratios"""
+        print("Handling swipe screen...")
+        
+        if self.swipe_config['swipes_completed'] >= self.swipe_config['total_swipes']:
+            print("All swipes completed")
+            self.finished = True
+            return
+            
+        # Get screen dimensions for swiping
+        screen_size = self.device.window_size()
+        center_x = screen_size[0] // 2
+        center_y = screen_size[1] // 2
+        
+        # Determine swipe direction based on configured ratio
+        should_swipe_right = random.random() < (self.swipe_config['right_swipe_percentage'] / 100)
+        
+        try:
+            # Define swipe coordinates with improved gesture recognition
+            swipe_distance = int(screen_size[0] * 0.7)  # Reduced from 0.8
+            swipe_y_variation = int(screen_size[1] * 0.1)  # Vertical variation
+            
+            if should_swipe_right:
+                # Swipe right
+                start_x = center_x - int(screen_size[0] * 0.3)  # Start from left of center
+                end_x = center_x + int(screen_size[0] * 0.4)    # End right of center
+                print("Swiping right...")
+            else:
+                # Swipe left
+                start_x = center_x + int(screen_size[0] * 0.3)  # Start from right of center
+                end_x = center_x - int(screen_size[0] * 0.4)    # End left of center
+                print("Swiping left...")
+            
+            # Add controlled randomness to coordinates
+            start_y = center_y + random.randint(-swipe_y_variation, swipe_y_variation)
+            end_y = start_y + random.randint(-20, 20)  # Small vertical variation
+            
+            # Longer duration for more reliable gesture recognition
+            duration = random.uniform(0.3, 0.5)  # Increased from 0.2-0.4
+            
+            # Perform swipe
+            self.device.swipe(
+                fx=start_x,
+                fy=start_y,
+                tx=end_x,
+                ty=end_y,
+                duration=duration
+            )
+            
+            self.swipe_config['swipes_completed'] += 1
+            print(f"Completed {self.swipe_config['swipes_completed']}/{self.swipe_config['total_swipes']} swipes")
+            
+            # Slightly longer delay between swipes
+            time.sleep(random.uniform(1.5, 3.5))
+            
+        except Exception as e:
+            print(f"Error during swipe: {str(e)}")
+
+    def set_swipe_config(self, total_swipes: int = 10, right_swipe_percentage: int = 30):
+        """Update swipe configuration"""
+        self.swipe_config.update({
+            'total_swipes': total_swipes,
+            'right_swipe_percentage': right_swipe_percentage,
+            'swipes_completed': 0
+        })
+
+    def run_flow(self):
+        """Run the dynamic flow"""
+        while not self.finished:
+            screen_name = self.identify_current_screen()
+            print(f"Current screen: {screen_name}")
+
+            if screen_name in self.screen_actions:
+                # Regular screen handling
+                action = self.screen_actions[screen_name]["action"]
+                try:
+                    action()
+                    time.sleep(2)
+                except Exception as e:
+                    print(f"Error executing action: {e}")
+                    self.try_fallback_buttons()
+            else:
+                self.try_fallback_buttons()
+
+    def identify_current_screen(self) -> str:
+        """Identify the current screen based on XML hierarchy"""
+        xml = self.device.dump_hierarchy()
+        root = ElementTree.fromstring(xml)
+
+        for screen_name, screen_info in self.screen_actions.items():
+            identifiers = screen_info["identifiers"]
+            if all(self.check_identifier(root, key, value)
+                   for key, value in identifiers.items()):
+                return screen_name
+
+        return "unknown"
+
+    def check_identifier(self, root, key, value):
+        """Check if identifier exists in XML hierarchy"""
+        if key == "text":
+            return self.find_text_in_xml(root, value)
+        elif key == "resource_id":
+            return self.find_resource_id_in_xml(root, value)
+        return False
+
+    def try_fallback_buttons(self):
+        """Try common buttons when screen isn't recognized"""
+        common_buttons = ["Maybe later", "YES", "NOT INTERESTED", "Continue", "Confirm", "OK", "Allow", "I accept", "Got it", "Change number", "Start connecting"]
+        for button_text in common_buttons:
+            if self.device(text=button_text).exists:
+                self.device(text=button_text).click()
+                time.sleep(2)
+                return True
+        return False
 
     def run_flow(self):
         while not self.finished:
@@ -237,9 +377,23 @@ class DynamicBumbleFlow:
 
     def try_fallback_buttons(self):
         """Try common buttons when screen isn't recognized"""
-        common_buttons = ["Continue", "Confirm", "OK", "Allow", "I accept", "Got it", "Change number"]
+        common_buttons = [
+            "YES",  # For right swipe confirmation
+            "NOT INTERESTED",  # For left swipe confirmation
+            "CANCEL",  # For both dialogs
+            "Maybe later", 
+            "Continue", 
+            "Confirm", 
+            "OK", 
+            "Allow", 
+            "I accept", 
+            "Got it", 
+            "Change number", 
+            "Start connecting"
+        ]
         for button_text in common_buttons:
             if self.device(text=button_text).exists:
+                print(f"Clicking fallback button: {button_text}")
                 self.device(text=button_text).click()
                 time.sleep(2)
                 return True
@@ -914,29 +1068,31 @@ class BumbleRegistration:
     def select_five_things(self):
         """Select 5 interests from the available options."""
         print("Selecting 5 things you're really into...")
-        
-        # List of possible interests with their partial matches
+
+        # List of possible interests with their partial matches - exactly as shown in UI
         interests = {
-            "Vegetarian": "Vegetarian",
-            "Horror": "Horror",
-            "Hiking trips": "Hiking",
-            "Writing": "Writing",
-            "Crafts": "Crafts",
-            "Coffee": "Coffee",
             "Art": "Art",
-            "Museums & galleries": "Museums",
-            "Festivals": "Festivals",
             "Baking": "Baking",
+            "Vegetarian": "Vegetarian",
+            "Exploring new cities": "Exploring",
+            "R&B": "R&B",
+            "Cats": "Cats",
+            "Dogs": "Dogs",
+            "Writing": "Writing",
             "Wine": "Wine",
             "Camping": "Camping",
-            "Exploring new cities": "Exploring",
-            "LGBTQ+ rights": "LGBTQ",
-            "R&B": "R&B"
+            "Country": "Country",
+            "Festivals": "Festivals",
+            "Museums & galleries": "Museums",
+            "Horror": "Horror",
+            "Yoga": "Yoga",
+            "Coffee": "Coffee",
+            "Dancing": "Dancing"
         }
-        
+
         # Select exactly 5 random interests
-        selected_keys = random.sample(list(interests.keys()), 5)
-        
+        selected_keys = random.sample(list(interests.keys()), 1)
+
         # Click each selected interest using the pattern that works
         for interest in selected_keys:
             print(f"Attempting to select: {interest}")
@@ -946,10 +1102,13 @@ class BumbleRegistration:
             ).click()
             self.delay(0.5)
 
-        # Click the arrow button to continue
-        print("Clicking Continue after selections...")
-        self.device(className="android.widget.ImageButton").click()
-        self.delay()
+        # Click Continue after selecting values
+        print("Clicking Continue after selecting values...")
+        if wait_for_element(self.device, class_name="android.view.View", description="Continue"):
+            self.device(className="android.view.View", description="Continue").click()
+            self.delay()
+
+
 
     def select_dating_preference(self):
         """Select dating preference."""
@@ -1098,7 +1257,7 @@ class BumbleRegistration:
         # List of possible interests
         interests = [
             "Cats", "Dogs", "Wine", "Horror", "Baking",
-            "Coffee", "Dancing", "Exploring new cities"
+            "Coffee", "Dancing", "Exploring new cities", 
         ]
 
         # Select 3-5 random interests
@@ -1166,11 +1325,10 @@ class BumbleRegistration:
         """Select drinking and smoking habits."""
         # Drinking habits selection
         print("Starting drinking habits selection...")
-        habits = ["Yes, I drink", "I drink sometimes", "I rarely drink", "No, I don't drink"]
+        habits = ["I drink sometimes", "I rarely drink", "No, I don't drink"]
         selected_habit = random.choice(habits)
         print(f"Attempting to select habit: {selected_habit}")
         partial_map = {
-            "Yes, I drink": "Yes, I",
             "I drink sometimes": "sometimes",
             "I rarely drink": "rarely",
             "No, I don't drink": "don"
@@ -1179,24 +1337,6 @@ class BumbleRegistration:
         self.device(
             className="android.widget.RadioButton",
             descriptionContains=partial_map[selected_habit]
-        ).click()
-        self.delay()
-
-        # Smoking habits selection using same pattern as drinking
-        print("Starting smoking selection...")
-        smoking_habits = ["Yes, I smoke", "I smoke sometimes", "No, I don't smoke", "I'm trying to quit"]
-        selected_smoking = random.choice(smoking_habits)
-        print(f"Attempting to select smoking habit: {selected_smoking}")
-        smoking_map = {
-            "Yes, I smoke": "Yes, I",
-            "I smoke sometimes": "sometimes",
-            "No, I don't smoke": "don't",
-            "I'm trying to quit": "trying"
-        }
-
-        self.device(
-            className="android.widget.RadioButton",
-            descriptionContains=smoking_map[selected_smoking]
         ).click()
         self.delay()
 
@@ -1209,30 +1349,22 @@ class BumbleRegistration:
     def handle_kids_questions(self):
         """Handle kids questions."""
         print("Starting kids questions...")
-        # First question about having kids
-        kids_status = ["Don't have kids", "Have kids"]
-        selected_status = random.choice(kids_status)
-        print(f"Attempting to select kids status: {selected_status}")
-        status_map = {
-            "Don't have kids": "Don't",
-            "Have kids": "Have"
-        }
 
+        # First question about having kids (only select "Don't have kids")
+        print("Selecting 'Don't have kids'")
         self.device(
             className="android.widget.RadioButton",
-            descriptionContains=status_map[selected_status]
+            descriptionContains="Don"
         ).click()
         self.delay()
 
-        # Second question about future kids
-        future_choices = ["Open to kids", "Want kids", "Don't want kids", "Not sure"]
+        # Second question about future kids (only "Open to kids" and "Want kids")
+        future_choices = ["Open to kids", "Want kids"]
         selected_choice = random.choice(future_choices)
         print(f"Selecting future kids preference: {selected_choice}")
         future_map = {
             "Open to kids": "Open",
-            "Want kids": "Want",
-            "Don't want kids": "Don't want",
-            "Not sure": "Not sure"
+            "Want kids": "Want"
         }
 
         self.device(
@@ -1245,7 +1377,8 @@ class BumbleRegistration:
         print("Clicking 'Continue' after kids questions...")
         if wait_for_element(self.device, class_name="android.view.View", description="Continue"):
             self.device(className="android.view.View", description="Continue").click()
-            self.delay()
+            self.delay() 
+
 
     def complete_profile_setup(self):
         """Complete the profile setup process."""
@@ -1441,18 +1574,6 @@ class BumbleRegistration:
 
     def finish_registration(self):
         """Complete the final registration steps."""
-
-        # Skip opening move
-        print("Clicking 'Skip' on opening move...")
-        if wait_for_element(self.device, class_name="android.widget.TextView", text="Skip"):
-            self.device(className="android.widget.TextView", text="Skip").click()
-            self.delay()
-
-        # Click 'Got it'
-        print("Checking for 'Got it' button...")
-        if wait_for_element(self.device, class_name="android.widget.TextView", text="Got it"):
-            self.device(className="android.widget.TextView", text="Got it").click()
-            self.delay()
 
         # Accept terms
         print("Clicking 'I accept' to accept terms...")
