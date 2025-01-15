@@ -11,16 +11,17 @@ from typing import Optional, Dict, Any
 from xml.etree import ElementTree
 from typing import Union, List
 
+
 class SwipeHandler:
     def __init__(self, device: u2.Device):
         self.device = device
-        
+
     def perform_swipe(self, direction: str):
         """Perform a single swipe in the specified direction"""
         screen_size = self.device.window_size()
         center_x = screen_size[0] // 2
         center_y = screen_size[1] // 2
-        
+
         swipe_coordinates = {
             'left': {
                 'start_x': center_x,
@@ -35,14 +36,14 @@ class SwipeHandler:
                 'end_y': center_y
             }
         }
-        
+
         # Add randomness to coordinates and duration
         start_x = swipe_coordinates[direction]['start_x'] + random.uniform(-50, 50)
         start_y = swipe_coordinates[direction]['start_y'] + random.uniform(-50, 50)
         end_x = swipe_coordinates[direction]['end_x'] + random.uniform(-50, 50)
         end_y = swipe_coordinates[direction]['end_y'] + random.uniform(-50, 50)
         duration = random.uniform(0.2, 0.4)
-        
+
         self.device.swipe(
             fx=start_x,
             fy=start_y,
@@ -50,9 +51,10 @@ class SwipeHandler:
             ty=end_y,
             duration=duration
         )
-        
+
         # Random delay between swipes
         time.sleep(random.uniform(1, 3))
+
 
 class DynamicBumbleFlow:
     def find_text_in_xml(self, root, text_substring: Union[str, List[str]]) -> bool:
@@ -82,7 +84,7 @@ class DynamicBumbleFlow:
         self.device = device
         self.bumble = bumble_registration  # This is our BumbleRegistration instance
         self.finished = False
-        
+
         # Add swipe configuration
         self.swipe_config = {
             'total_swipes': 10,
@@ -182,9 +184,9 @@ class DynamicBumbleFlow:
             },
             "skip": {
                 "identifiers": {
-                    "text": ["Write your own Opening Move", "Religion", "Can we get your email?", "ethnicity?", 
-                            "important in your life", "height", "like to date you",
-                            "How about causes and communities"]
+                    "text": ["Write your own Opening Move", "Religion", "Can we get your email?", "ethnicity?",
+                             "important in your life", "height", "like to date you",
+                             "How about causes and communities"]
                 },
                 "action": self.bumble.Skip
             },
@@ -202,13 +204,13 @@ class DynamicBumbleFlow:
             },
             "swipe_screen": {
                 "identifiers": {
-                    "text": ["Keep on swiping", "we're learning what you like", "learning what you like",]
+                    "text": ["Keep on swiping", "we're learning what you like", "learning what you like", "Chats" ]
                 },
                 "action": self.handle_swiping
             },
             "photo_upload": {
                 "identifiers": {
-                    "text": "photo"
+                    "text": "Add at least 4"
                 },
                 "action": self.bumble.setup_photos
             },
@@ -220,49 +222,49 @@ class DynamicBumbleFlow:
                 "action": self.bumble.finish_registration
             },
             # Add new swiping screen detection
-            
+
         }
 
     def handle_swiping(self):
         """Handle the swiping screen with configured ratios"""
         print("Handling swipe screen...")
-        
+
         if self.swipe_config['swipes_completed'] >= self.swipe_config['total_swipes']:
             print("All swipes completed")
             self.finished = True
             return
-            
+
         # Get screen dimensions for swiping
         screen_size = self.device.window_size()
         center_x = screen_size[0] // 2
         center_y = screen_size[1] // 2
-        
+
         # Determine swipe direction based on configured ratio
         should_swipe_right = random.random() < (self.swipe_config['right_swipe_percentage'] / 100)
-        
+
         try:
             # Define swipe coordinates with improved gesture recognition
             swipe_distance = int(screen_size[0] * 0.7)  # Reduced from 0.8
             swipe_y_variation = int(screen_size[1] * 0.1)  # Vertical variation
-            
+
             if should_swipe_right:
                 # Swipe right
                 start_x = center_x - int(screen_size[0] * 0.3)  # Start from left of center
-                end_x = center_x + int(screen_size[0] * 0.4)    # End right of center
+                end_x = center_x + int(screen_size[0] * 0.4)  # End right of center
                 print("Swiping right...")
             else:
                 # Swipe left
                 start_x = center_x + int(screen_size[0] * 0.3)  # Start from right of center
-                end_x = center_x - int(screen_size[0] * 0.4)    # End left of center
+                end_x = center_x - int(screen_size[0] * 0.4)  # End left of center
                 print("Swiping left...")
-            
+
             # Add controlled randomness to coordinates
             start_y = center_y + random.randint(-swipe_y_variation, swipe_y_variation)
             end_y = start_y + random.randint(-20, 20)  # Small vertical variation
-            
+
             # Longer duration for more reliable gesture recognition
             duration = random.uniform(0.3, 0.5)  # Increased from 0.2-0.4
-            
+
             # Perform swipe
             self.device.swipe(
                 fx=start_x,
@@ -271,13 +273,13 @@ class DynamicBumbleFlow:
                 ty=end_y,
                 duration=duration
             )
-            
+
             self.swipe_config['swipes_completed'] += 1
             print(f"Completed {self.swipe_config['swipes_completed']}/{self.swipe_config['total_swipes']} swipes")
-            
+
             # Slightly longer delay between swipes
             time.sleep(random.uniform(1.5, 3.5))
-            
+
         except Exception as e:
             print(f"Error during swipe: {str(e)}")
 
@@ -330,7 +332,8 @@ class DynamicBumbleFlow:
 
     def try_fallback_buttons(self):
         """Try common buttons when screen isn't recognized"""
-        common_buttons = ["Maybe later", "YES", "NOT INTERESTED", "Continue", "Confirm", "OK", "Allow", "I accept", "Got it", "Change number", "Start connecting"]
+        common_buttons = ["Maybe later", "YES", "NOT INTERESTED", "Continue", "Confirm", "OK", "Allow", "I accept",
+                          "Got it", "Change number", "Start connecting"]
         for button_text in common_buttons:
             if self.device(text=button_text).exists:
                 self.device(text=button_text).click()
@@ -381,14 +384,14 @@ class DynamicBumbleFlow:
             "YES",  # For right swipe confirmation
             "NOT INTERESTED",  # For left swipe confirmation
             "CANCEL",  # For both dialogs
-            "Maybe later", 
-            "Continue", 
-            "Confirm", 
-            "OK", 
-            "Allow", 
-            "I accept", 
-            "Got it", 
-            "Change number", 
+            "Maybe later",
+            "Continue",
+            "Confirm",
+            "OK",
+            "Allow",
+            "I accept",
+            "Got it",
+            "Change number",
             "Start connecting"
         ]
         for button_text in common_buttons:
@@ -1037,7 +1040,7 @@ class BumbleRegistration:
 
     def handle_next_buttons(self):
         """Handle clicking next buttons for additional screens."""
-                # Try multiple methods to click the continue button
+        # Try multiple methods to click the continue button
         print("Clicking Continue after selecting gender...")
         try:
             # Try to find the arrow button by its class and index (bottom right corner)
@@ -1064,7 +1067,7 @@ class BumbleRegistration:
         if wait_for_element(self.device, resource_id="com.bumble.app:id/reg_footer_label", text="Skip"):
             self.device(resourceId="com.bumble.app:id/reg_footer_label", text="Skip").click()
             self.delay()
-    
+
     def select_five_things(self):
         """Select 5 interests from the available options."""
         print("Selecting 5 things you're really into...")
@@ -1108,8 +1111,6 @@ class BumbleRegistration:
             self.device(className="android.view.View", description="Continue").click()
             self.delay()
 
-
-
     def select_dating_preference(self):
         """Select dating preference."""
         print("Setting dating preferences...")
@@ -1117,7 +1118,7 @@ class BumbleRegistration:
             self.device(className="android.widget.TextView", text="Men").click()
             self.delay()
 
-                # Try multiple methods to click the continue button
+            # Try multiple methods to click the continue button
         print("Clicking Continue after selecting gender...")
         try:
             # Try to find the arrow button by its class and index (bottom right corner)
@@ -1257,7 +1258,7 @@ class BumbleRegistration:
         # List of possible interests
         interests = [
             "Cats", "Dogs", "Wine", "Horror", "Baking",
-            "Coffee", "Dancing", "Exploring new cities", 
+            "Coffee", "Dancing", "Exploring new cities",
         ]
 
         # Select 3-5 random interests
@@ -1299,7 +1300,7 @@ class BumbleRegistration:
     def Skip(self):
         """Skip the current screen."""
         print("Attempting to skip screen...")
-        
+
         # Try multiple skip button variations
         try:
             # Try the footer skip button
@@ -1318,7 +1319,7 @@ class BumbleRegistration:
                 print("No skip button found")
         except Exception as e:
             print(f"Error during skip: {e}")
-            
+
         self.delay()
 
     def select_habits(self):
@@ -1377,8 +1378,7 @@ class BumbleRegistration:
         print("Clicking 'Continue' after kids questions...")
         if wait_for_element(self.device, class_name="android.view.View", description="Continue"):
             self.device(className="android.view.View", description="Continue").click()
-            self.delay() 
-
+            self.delay()
 
     def complete_profile_setup(self):
         """Complete the profile setup process."""
