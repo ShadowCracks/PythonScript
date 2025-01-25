@@ -224,6 +224,29 @@ class DynamicBumbleFlow:
             # Add new swiping screen detection
 
         }
+    def scroll_profile(self):
+        """
+        Scroll down on the current profile, wait a bit, then scroll back up.
+        """
+        screen_size = self.device.window_size()
+        width = screen_size[0]
+        height = screen_size[1]
+
+        center_x = width // 2
+        # Start near the center, but a bit lower for a "scroll up" gesture
+        start_y = int(height * 0.7)
+        end_y = int(height * 0.3)
+
+        # Scroll down (finger moves from lower to upper = upward gesture)
+        print("Scrolling down within the profile...")
+        self.device.swipe(center_x, start_y, center_x, end_y, duration=0.4)
+        time.sleep(random.uniform(1.5, 3))  # Wait while user reads more details
+
+        # Scroll back up (finger moves from upper to lower = downward gesture)
+        print("Scrolling back up...")
+        self.device.swipe(center_x, end_y, center_x, start_y, duration=0.4)
+        time.sleep(random.uniform(1.5, 3))  # Pause briefly again
+
 
     def handle_swiping(self):
         """Handle the swiping screen with configured ratios"""
@@ -234,7 +257,12 @@ class DynamicBumbleFlow:
             self.finished = True
             return
 
-        # Get screen dimensions for swiping
+        # Optional: add a random chance to scroll the profile
+        # For example, 30% chance to scroll the current profile up/down:
+        if random.random() < 0.3:
+            self.scroll_profile()
+
+        # The rest of your existing code for left/right swipe follows
         screen_size = self.device.window_size()
         center_x = screen_size[0] // 2
         center_y = screen_size[1] // 2
@@ -243,29 +271,23 @@ class DynamicBumbleFlow:
         should_swipe_right = random.random() < (self.swipe_config['right_swipe_percentage'] / 100)
 
         try:
-            # Define swipe coordinates with improved gesture recognition
-            swipe_distance = int(screen_size[0] * 0.7)  # Reduced from 0.8
-            swipe_y_variation = int(screen_size[1] * 0.1)  # Vertical variation
+            swipe_distance = int(screen_size[0] * 0.7)
+            swipe_y_variation = int(screen_size[1] * 0.1)
 
             if should_swipe_right:
-                # Swipe right
-                start_x = center_x - int(screen_size[0] * 0.3)  # Start from left of center
-                end_x = center_x + int(screen_size[0] * 0.4)  # End right of center
+                start_x = center_x - int(screen_size[0] * 0.3)
+                end_x   = center_x + int(screen_size[0] * 0.4)
                 print("Swiping right...")
             else:
-                # Swipe left
-                start_x = center_x + int(screen_size[0] * 0.3)  # Start from right of center
-                end_x = center_x - int(screen_size[0] * 0.4)  # End left of center
+                start_x = center_x + int(screen_size[0] * 0.3)
+                end_x   = center_x - int(screen_size[0] * 0.4)
                 print("Swiping left...")
 
-            # Add controlled randomness to coordinates
             start_y = center_y + random.randint(-swipe_y_variation, swipe_y_variation)
-            end_y = start_y + random.randint(-20, 20)  # Small vertical variation
+            end_y   = start_y + random.randint(-20, 20)
 
-            # Longer duration for more reliable gesture recognition
-            duration = random.uniform(0.3, 0.5)  # Increased from 0.2-0.4
+            duration = random.uniform(0.3, 0.5)
 
-            # Perform swipe
             self.device.swipe(
                 fx=start_x,
                 fy=start_y,
@@ -282,6 +304,7 @@ class DynamicBumbleFlow:
 
         except Exception as e:
             print(f"Error during swipe: {str(e)}")
+
 
     def set_swipe_config(self, total_swipes: int = 10, right_swipe_percentage: int = 30):
         """Update swipe configuration"""
@@ -775,6 +798,8 @@ class BumbleRegistration:
         """Add a delay between actions."""
         time.sleep(seconds)
 
+    
+
     def request_phone_number(self) -> Optional[str]:
         """Request a phone number from DaisySMS."""
         params = {
@@ -851,16 +876,41 @@ class BumbleRegistration:
             raise
 
     def enter_phone_number(self, phone_number: str):
-        """Enter phone number and click next."""
-        print("Entering phone number...")
-        for digit in str(phone_number):
-            self.device.shell(f"input text {digit}")
-            time.sleep(0.1)
-        self.delay()
+        """
+        Check if the phone input field is empty. If it's empty, enter the phone number.
+        If it's already populated, skip typing and just press 'Next'.
+        """
+        # Adjust the resourceId to match your actual phone input field
+        phone_input_field = self.device(resourceId="com.bumble.app:id/phone_edit_text")
 
+        if phone_input_field.exists:
+            # Try getting the current text from the field
+            # (Check your uiautomator2 version; use .get_text() or .info.get("text") as needed)
+            current_text = phone_input_field.get_text()
+
+            if current_text and current_text.strip():
+                # If there's already text in the field, assume it's our phone number
+                print(f"Phone field is already filled with: {current_text}. Pressing 'Next' without retyping.")
+            else:
+                # Field is empty => type the new phone number
+                print("Phone field is empty. Entering phone number...")
+                for digit in str(phone_number):
+                    self.device.shell(f"input text {digit}")
+                    time.sleep(0.1)
+                self.delay()
+        else:
+            # Fallback: If we cannot detect the phone input field at all, proceed as usual
+            print("Could not find phone input field. Attempting fallback typing.")
+            for digit in str(phone_number):
+                self.device.shell(f"input text {digit}")
+                time.sleep(0.1)
+            self.delay()
+
+        # In either case, press 'Next' at the end
         print("Clicking 'Next' button...")
         self.device(resourceId="com.bumble.app:id/reg_footer_button").click()
         self.delay()
+
 
     def click_ok_button(self):
         """Click OK button."""
