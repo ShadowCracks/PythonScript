@@ -10,7 +10,8 @@ from concurrent.futures import ThreadPoolExecutor
 from typing import Optional, Dict, Any
 from xml.etree import ElementTree
 from typing import Union, List
-
+from PIL import Image
+import io
 
 class SwipeHandler:
     def __init__(self, device: u2.Device):
@@ -176,6 +177,13 @@ class DynamicBumbleFlow:
                 },
                 "action": self.bumble.select_relationship_goal
             },
+           "opening_moves": {
+                "identifiers": {
+                    "text": "Write your own Opening Move"
+                },
+                "action": self.bumble.select_opening_move
+            }, 
+            
             "next_button": {
                 "identifiers": {
                     "text": ["Shown as:", "What brings you to Bumble"]
@@ -184,7 +192,7 @@ class DynamicBumbleFlow:
             },
             "skip": {
                 "identifiers": {
-                    "text": ["Write your own Opening Move", "Religion", "Can we get your email?", "ethnicity?",
+                    "text": [ "Religion", "Can we get your email?", "ethnicity?",
                              "important in your life", "height", "like to date you",
                              "How about causes and communities"]
                 },
@@ -259,7 +267,7 @@ class DynamicBumbleFlow:
 
         # Optional: add a random chance to scroll the profile
         # For example, 30% chance to scroll the current profile up/down:
-        if random.random() < 0.3:
+        if random.random() < 0.7:
             self.scroll_profile()
 
         # The rest of your existing code for left/right swipe follows
@@ -875,39 +883,35 @@ class BumbleRegistration:
             print(f"Error clicking 'Use cell phone number' button: {str(e)}")
             raise
 
+
     def enter_phone_number(self, phone_number: str):
-        """
-        Check if the phone input field is empty. If it's empty, enter the phone number.
-        If it's already populated, skip typing and just press 'Next'.
-        """
-        # Adjust the resourceId to match your actual phone input field
         phone_input_field = self.device(resourceId="com.bumble.app:id/phone_edit_text")
-
+        
         if phone_input_field.exists:
-            # Try getting the current text from the field
-            # (Check your uiautomator2 version; use .get_text() or .info.get("text") as needed)
-            current_text = phone_input_field.get_text()
-
-            if current_text and current_text.strip():
-                # If there's already text in the field, assume it's our phone number
-                print(f"Phone field is already filled with: {current_text}. Pressing 'Next' without retyping.")
+            bounds = phone_input_field.info['bounds']
+            # Get screenshot as bytes and convert to PIL Image
+            screenshot = Image.open(io.BytesIO(self.device.screenshot(format='raw')))
+            # Crop to input field bounds
+            cropped = screenshot.crop((bounds['left'], bounds['top'], 
+                                    bounds['right'], bounds['bottom']))
+            # Use device OCR on cropped image
+            has_number = len([c for c in self.device.ocr(cropped) if c.isdigit()]) > 0
+            
+            if has_number:
+                print("Phone field has number. Skipping entry.")
             else:
-                # Field is empty => type the new phone number
-                print("Phone field is empty. Entering phone number...")
+                print("Phone field empty. Entering number...")
                 for digit in str(phone_number):
                     self.device.shell(f"input text {digit}")
                     time.sleep(0.1)
                 self.delay()
         else:
-            # Fallback: If we cannot detect the phone input field at all, proceed as usual
-            print("Could not find phone input field. Attempting fallback typing.")
+            # Fallback typing
             for digit in str(phone_number):
                 self.device.shell(f"input text {digit}")
                 time.sleep(0.1)
             self.delay()
 
-        # In either case, press 'Next' at the end
-        print("Clicking 'Next' button...")
         self.device(resourceId="com.bumble.app:id/reg_footer_button").click()
         self.delay()
 
@@ -1119,47 +1123,68 @@ class BumbleRegistration:
             self.delay()
 
     def select_five_things(self):
-        """Select 5 interests from the available options."""
-        print("Selecting 5 things you're really into...")
+        """Dynamically select between 3 and 5 checkboxes."""
+        print("Selecting interests from what's actually on the screen...")
 
-        # List of possible interests with their partial matches - exactly as shown in UI
-        interests = {
-            "Art": "Art",
-            "Baking": "Baking",
-            "Vegetarian": "Vegetarian",
-            "Exploring new cities": "Exploring",
-            "R&B": "R&B",
-            "Cats": "Cats",
-            "Dogs": "Dogs",
-            "Writing": "Writing",
-            "Wine": "Wine",
-            "Camping": "Camping",
-            "Country": "Country",
-            "Festivals": "Festivals",
-            "Museums & galleries": "Museums",
-            "Horror": "Horror",
-            "Yoga": "Yoga",
-            "Coffee": "Coffee",
-            "Dancing": "Dancing"
-        }
+        xml_content = self.device.dump_hierarchy()
+        root = ElementTree.fromstring(xml_content)
 
-        # Select exactly 5 random interests
-        selected_keys = random.sample(list(interests.keys()), 1)
+        checkboxes_found = []
+        for node in root.iter():
+            if node.attrib.get("class") == "android.widget.CheckBox":
+                label_text = node.attrib.get("content-desc") or node.attrib.get("text")
+                if label_text:
+                    checkboxes_found.append(label_text.strip())
 
-        # Click each selected interest using the pattern that works
-        for interest in selected_keys:
-            print(f"Attempting to select: {interest}")
-            self.device(
-                className="android.widget.CheckBox",
-                descriptionContains=interests[interest]
-            ).click()
-            self.delay(0.5)
+        print(f"Found {len(checkboxes_found)} checkboxes: {checkboxes_found}")
 
-        # Click Continue after selecting values
-        print("Clicking Continue after selecting values...")
-        if wait_for_element(self.device, class_name="android.view.View", description="Continue"):
-            self.device(className="android.view.View", description="Continue").click()
+        if not checkboxes_found:
+            print("No checkboxes found. Attempting to click Skip...")
+            try:
+                skip_button = self.device(className="android.widget.TextView", text="Skip")
+                if skip_button.exists:
+                    skip_button.click()
+                    self.delay()
+                else:
+                    print("Skip button not found")
+            except Exception as e:
+                print(f"Error clicking Skip: {e}")
+            return
+
+        num_to_select = random.randint(3, 5)
+        selected_labels = random.sample(checkboxes_found, num_to_select)
+        print(f"Selecting these {num_to_select} items: {selected_labels}")
+
+        for label in selected_labels:
+            try:
+                check_box = self.device(
+                    className="android.widget.CheckBox",
+                    description=label
+                )
+
+                if not check_box.exists:
+                    check_box = self.device(
+                        className="android.widget.CheckBox",
+                        text=label
+                    )
+
+                if check_box.exists:
+                    print(f"Clicking checkbox: {label}")
+                    check_box.click()
+                    time.sleep(0.5)
+                else:
+                    print(f"Checkbox '{label}' not found on screen. Skipping.")
+            except Exception as e:
+                print(f"Error clicking checkbox '{label}': {e}")
+
+        print("Clicking 'Continue' after selecting values...")
+        continue_btn = self.device(className="android.view.View", description="Continue")
+        if continue_btn.exists:
+            continue_btn.click()
             self.delay()
+        else:
+            print("No 'Continue' button found.")
+
 
     def select_dating_preference(self):
         """Select dating preference."""
@@ -1621,6 +1646,45 @@ class BumbleRegistration:
             self.device(className="android.widget.Button", resourceId="com.bumble.app:id/reg_footer_button",
                         description="Continue").click()
             self.delay()
+    
+    def select_opening_move(self):
+        """Selects introvert/extrovert option or hits Skip if not found"""
+        try:
+            introvert_extrovert = self.device(text="Are you more of an introvert or an extrovert?")
+            if introvert_extrovert.exists:
+                print("Selecting introvert/extrovert opening move...")
+                introvert_extrovert.click()
+                self.delay()
+            else:
+                print("Introvert option not found, clicking Skip...")
+                skip_button = self.device(text="Skip")
+                if skip_button.exists:
+                    skip_button.click()
+                    self.delay()
+                    return
+                
+            print("Clicking Continue using multiple methods...")
+            try:
+                if self.device(className="android.widget.ImageButton").exists:
+                    self.device(className="android.widget.ImageButton").click()
+                elif self.device(className="android.widget.Button", description="Continue").exists:
+                    self.device(className="android.widget.Button", description="Continue").click()
+                elif self.device(className="android.view.View", description="Continue").exists:
+                    self.device(className="android.view.View", description="Continue").click()
+                else:
+                    screen_size = self.device.window_size()
+                    x = screen_size[0] - 50  
+                    y = screen_size[1] - 50  
+                    self.device.click(x, y)
+                print("Continue button clicked successfully")
+            except Exception as e:
+                print(f"Error clicking continue button: {str(e)}")
+            self.delay()
+        except Exception as e:
+            print(f"Error in opening move selection: {e}")
+
+
+
 
     def finish_registration(self):
         """Complete the final registration steps."""
@@ -1700,10 +1764,6 @@ def main():
         # Process and upload images
         cloud_phone.process_subfolder()
 
-        # Add delay before enabling ADB
-        print("Waiting 10 seconds before enabling ADB...")
-        time.sleep(3)
-
         # Enable ADB and get connection info
         print("Enabling ADB...")
         cloud_phone.enable_adb()
@@ -1716,27 +1776,30 @@ def main():
 
         print("ADB info retrieved successfully")
 
-        # Create ADB address and start Bumble registration
+        # Create ADB address for connection
         adb_address = f"{adb_info['ip']}:{adb_info['port']}"
         print(f"Connecting to device at: {adb_address}")
 
-        # Add delay before starting Bumble registration
-        # Add longer delay before device connection
-        print("Waiting 15 seconds for device to be fully ready...")
-        time.sleep(5)
+        # Initialize ADB connection and glogin
+        print("Initializing device connection...")
+        os.system("adb kill-server")
+        time.sleep(2)
+        os.system(f"adb connect {adb_address}")
+        time.sleep(2)
+        os.system(f'adb shell "glogin {adb_info["password"]}"')
+        time.sleep(2)
+
+        try:
+            bumble = BumbleRegistration(adb_address, adb_info['password'])
+        except Exception as e:
+            print(f"Error initializing BumbleRegistration: {str(e)}")
+            raise
+
+        # Only start Bumble after all connections are established
         print("Starting Bumble app...")
         cloud_phone.start_bumble()
         print("Waiting for Bumble to initialize...")
         time.sleep(5)
-
-        try:
-            bumble = BumbleRegistration(adb_address, adb_info['password'])  # Pass the password
-        except Exception as e:
-            print(f"Error initializing BumbleRegistration: {str(e)}")
-            print("Trying to reset ADB connection...")
-            os.system(f"adb connect {adb_address}")
-            time.sleep(2)
-            bumble = BumbleRegistration(adb_address, adb_info['password'])  # Pass the password here too
 
         # Run the registration process
         success = bumble.run_screen_loop()
@@ -1748,7 +1811,6 @@ def main():
 
     except Exception as e:
         print(f"Error during automation process: {str(e)}")
-        # Print full error details
         import traceback
         print("Full error details:")
         print(traceback.format_exc())
