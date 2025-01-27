@@ -767,41 +767,50 @@ class CloudPhoneManager:
 
 class BumbleRegistration:
     def __init__(self, adb_address: str, password: str):
-
         print(f"Attempting to connect to device at {adb_address}")
         max_retries = 3
         retry_delay = 5
 
-        # Kill existing ADB server first
-        print("Killing existing ADB server...")
-        os.system("adb kill-server")
-        time.sleep(2)  # Wait for server to fully shut down
+        # Only disconnect this specific device
+        os.system(f"adb disconnect {adb_address}")
+        time.sleep(2)
 
         for attempt in range(max_retries):
             try:
                 print(f"Connection attempt {attempt + 1}/{max_retries}")
-                # First connect via ADB
+                
+                # Connect to specific device
                 os.system(f"adb connect {adb_address}")
                 time.sleep(2)
-                # Login with password
-                os.system(f'adb shell "glogin {password}"')
+                
+                # Always use -s flag to specify the device
+                os.system(f'adb -s {adb_address} shell "glogin {password}"')
                 time.sleep(2)
-                # Now connect with uiautomator2
+                
+                # Initialize uiautomator2 with the specific device
                 self.device = u2.connect(adb_address)
+                
                 # Test connection
                 self.device.info
                 print("Successfully connected to device")
                 self.current_order_id = None
+                
+                # Initialize dynamic_flow after successful connection
+                self.dynamic_flow = DynamicBumbleFlow(self.device, self)
                 break
+                
             except Exception as e:
                 print(f"Connection attempt {attempt + 1} failed: {str(e)}")
+                # Disconnect only this specific device before retrying
+                os.system(f"adb disconnect {adb_address}")
+                time.sleep(2)
+                
                 if attempt < max_retries - 1:
                     print(f"Waiting {retry_delay} seconds before retrying...")
                     time.sleep(retry_delay)
                 else:
                     raise Exception(f"Failed to connect to device after {max_retries} attempts")
-        self.dynamic_flow = DynamicBumbleFlow(self.device, self)
-
+                
     def delay(self, seconds: float = 2.5):
         """Add a delay between actions."""
         time.sleep(seconds)
@@ -1745,6 +1754,9 @@ class BumbleRegistration:
 def main():
     """Main function to execute the entire workflow."""
     try:
+        # Add small random delay to prevent simultaneous connections
+        time.sleep(random.uniform(1, 5))
+
         # Initialize and setup cloud phone
         cloud_phone = CloudPhoneManager()
         creation_response = cloud_phone.create_profile()
@@ -1780,10 +1792,8 @@ def main():
         adb_address = f"{adb_info['ip']}:{adb_info['port']}"
         print(f"Connecting to device at: {adb_address}")
 
-        # Initialize ADB connection and glogin
+        # Initialize ADB connection and glogin WITHOUT killing the server
         print("Initializing device connection...")
-        os.system("adb kill-server")
-        time.sleep(2)
         os.system(f"adb connect {adb_address}")
         time.sleep(2)
         os.system(f'adb shell "glogin {adb_info["password"]}"')
