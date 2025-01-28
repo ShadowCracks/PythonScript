@@ -12,6 +12,112 @@ from xml.etree import ElementTree
 from typing import Union, List
 from PIL import Image
 import io
+import json
+from datetime import datetime
+
+UPDATE_PROXY_URL = "https://openapi.geelark.com/open/v1/phone/updateProxy"
+GET_WEB_URL = "https://openapi.geelark.com/open/v1/phone/getWebUrl"
+
+
+class TokenManager:
+    def __init__(self):
+        self.log_dir = "logs"
+        if not os.path.exists(self.log_dir):
+            os.makedirs(self.log_dir)
+
+        self.tokens_dir = "tokens"
+        if not os.path.exists(self.tokens_dir):
+            os.makedirs(self.tokens_dir)
+
+    def _append_to_log(self, category: str, data: dict):
+        """Append data to appropriate log file"""
+        timestamp = datetime.now().strftime("%Y-%m-%d")
+        filename = os.path.join(self.log_dir, f"{category}_{timestamp}.json")
+
+        try:
+            if os.path.exists(filename):
+                with open(filename, "r") as f:
+                    log_data = json.load(f)
+            else:
+                log_data = []
+
+            log_data.append(data)
+
+            with open(filename, "w") as f:
+                json.dump(log_data, f, indent=4)
+
+        except Exception as e:
+            print(f"Error saving to log: {str(e)}")
+
+    def get_token_count(self) -> dict:
+        """Get count of success and failed tokens for today"""
+        timestamp = datetime.now().strftime("%Y-%m-%d")
+        counts = {"success": 0, "failed": 0}
+
+        for category in ["success", "failed"]:
+            filename = os.path.join(self.log_dir, f"{category}_{timestamp}.json")
+            if os.path.exists(filename):
+                with open(filename, "r") as f:
+                    data = json.load(f)
+                    counts[category] = len(data)
+
+        # You must RETURN the dictionary for your code to use it:
+        return counts
+
+    def save_success_token(self, profile_id: str, location: str = "unknown"):
+        """Save successful token details"""
+        timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+        token_data = {
+            "profile_id": profile_id,
+            "creation_time": timestamp,
+            "location": location,
+            "status": "success"
+        }
+
+        # Save to success log
+        filename = os.path.join(self.tokens_dir, f"token_{profile_id}.json")
+        with open(filename, "w") as f:
+            json.dump(token_data, f, indent=4)
+
+        # Add to success log
+        self._append_to_log("success", token_data)
+
+    def save_failed_token(self, profile_id: str, error: str):
+        """Save failed token details"""
+        timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+        token_data = {
+            "profile_id": profile_id,
+            "creation_time": timestamp,
+            "error": error,
+            "status": "failed"
+        }
+
+        # Add to failed log
+        self._append_to_log("failed", token_data)
+
+
+class CloudPhoneSettings:
+    def __init__(self):
+        self.coordinates = None
+        self.dmt_proxy = "socks5://dmtproxy:dmtproxy@5.161.22.114:16540"
+        self.initial_settings = {
+            "amount": 5,  # Create 5 phones at once
+            "androidVersion": 4,  # Android 13
+            "groupName": "API",
+            "tagsName": ["API - 1"],
+            "region": None,
+            "remark": "",
+            "gpsInfo": None  # Will be set based on coordinates
+        }
+
+    def set_coordinates(self, lat: float, lon: float):
+        self.coordinates = {"latitude": lat, "longitude": lon}
+        self.initial_settings["gpsInfo"] = {
+            "latitude": lat,
+            "longitude": lon,
+            "accuracy": 10.0
+        }
+
 
 class SwipeHandler:
     def __init__(self, device: u2.Device):
@@ -177,13 +283,13 @@ class DynamicBumbleFlow:
                 },
                 "action": self.bumble.select_relationship_goal
             },
-           "opening_moves": {
+            "opening_moves": {
                 "identifiers": {
                     "text": "Write your own Opening Move"
                 },
                 "action": self.bumble.select_opening_move
-            }, 
-            
+            },
+
             "next_button": {
                 "identifiers": {
                     "text": ["Shown as:", "What brings you to Bumble"]
@@ -192,7 +298,7 @@ class DynamicBumbleFlow:
             },
             "skip": {
                 "identifiers": {
-                    "text": [ "Religion", "Can we get your email?", "ethnicity?",
+                    "text": ["Religion", "Can we get your email?", "ethnicity?",
                              "important in your life", "height", "like to date you",
                              "How about causes and communities"]
                 },
@@ -212,7 +318,7 @@ class DynamicBumbleFlow:
             },
             "swipe_screen": {
                 "identifiers": {
-                    "text": ["Keep on swiping", "we're learning what you like", "learning what you like", "Chats" ]
+                    "text": ["Keep on swiping", "we're learning what you like", "learning what you like", "Chats"]
                 },
                 "action": self.handle_swiping
             },
@@ -232,6 +338,7 @@ class DynamicBumbleFlow:
             # Add new swiping screen detection
 
         }
+
     def scroll_profile(self):
         """
         Scroll down on the current profile, wait a bit, then scroll back up.
@@ -254,7 +361,6 @@ class DynamicBumbleFlow:
         print("Scrolling back up...")
         self.device.swipe(center_x, end_y, center_x, start_y, duration=0.4)
         time.sleep(random.uniform(1.5, 3))  # Pause briefly again
-
 
     def handle_swiping(self):
         """Handle the swiping screen with configured ratios"""
@@ -284,15 +390,15 @@ class DynamicBumbleFlow:
 
             if should_swipe_right:
                 start_x = center_x - int(screen_size[0] * 0.3)
-                end_x   = center_x + int(screen_size[0] * 0.4)
+                end_x = center_x + int(screen_size[0] * 0.4)
                 print("Swiping right...")
             else:
                 start_x = center_x + int(screen_size[0] * 0.3)
-                end_x   = center_x - int(screen_size[0] * 0.4)
+                end_x = center_x - int(screen_size[0] * 0.4)
                 print("Swiping left...")
 
             start_y = center_y + random.randint(-swipe_y_variation, swipe_y_variation)
-            end_y   = start_y + random.randint(-20, 20)
+            end_y = start_y + random.randint(-20, 20)
 
             duration = random.uniform(0.3, 0.5)
 
@@ -312,7 +418,6 @@ class DynamicBumbleFlow:
 
         except Exception as e:
             print(f"Error during swipe: {str(e)}")
-
 
     def set_swipe_config(self, total_swipes: int = 10, right_swipe_percentage: int = 30):
         """Update swipe configuration"""
@@ -414,7 +519,6 @@ class DynamicBumbleFlow:
         common_buttons = [
             "YES",  # For right swipe confirmation
             "NOT INTERESTED",  # For left swipe confirmation
-            "CANCEL",  # For both dialogs
             "Maybe later",
             "Continue",
             "Confirm",
@@ -493,6 +597,17 @@ class CloudPhoneManager:
     def __init__(self):
         self.profile_id = None
         self.adb_info = None
+        self.coordinates = None
+        self.dmt_proxy = "socks5://dmtproxy:dmtproxy@5.161.22.114:16540"
+
+    def set_coordinates(self, lat: float, lon: float):
+        self.coordinates = {
+            "latitude": lat,
+            "longitude": lon,
+            "accuracy": 10.0
+        }
+        # Update profile settings with coordinates
+        PROFILE_SETTINGS["gpsInfo"] = self.coordinates
 
     def generate_headers(self) -> Dict[str, str]:
         """Generate headers required for the API request."""
@@ -510,6 +625,58 @@ class CloudPhoneManager:
             "nonce": nonce,
             "sign": sign
         }
+
+    def create_profile(self) -> Dict[str, Any]:
+        """Create a cloud phone profile with DMT proxy initially."""
+        # Use DMT proxy for initial setup
+        dmt_proxy_parts = self.dmt_proxy.replace("socks5://", "").split("@")
+        auth_parts = dmt_proxy_parts[0].split(":")
+        proxy_parts = dmt_proxy_parts[1].split(":")
+
+        proxy_config = {
+            "typeId": 1,
+            "server": proxy_parts[0],
+            "port": int(proxy_parts[1]),
+            "username": auth_parts[0],
+            "password": auth_parts[1]
+        }
+
+        PROFILE_SETTINGS["proxyConfig"] = proxy_config
+
+        headers = self.generate_headers()
+        response = requests.post(CREATE_PROFILE_URL, headers=headers, json=PROFILE_SETTINGS)
+
+        print("DEBUG create_profile response:", response.json())
+        creation_response = response.json()
+
+        profile_data = creation_response.get("data", {}).get("details", [{}])[0]
+        self.profile_id = profile_data.get("id")
+
+        if self.profile_id:
+            return creation_response
+        else:
+            print("Failed to create profile. Response:", creation_response)
+            return creation_response
+
+    def switch_to_proxyempire(self):
+        """switch from DMT proxy to ProxyEmpire proxy."""
+        # Get a random proxy from the proxies.txt file
+        proxy = self.get_random_proxy()
+
+        print(f"switch to ProxyEmpire proxy... Selected proxy: {proxy}")
+
+        print("DEBUG: Proxy switched successfully.")
+
+    def get_web_url(self) -> str:
+        """Get web access URL for the cloud phone"""
+        headers = self.generate_headers()
+        payload = {"ids": [self.profile_id]}
+        response = requests.post(GET_WEB_URL, headers=headers, json=payload)
+        data = response.json()
+
+        if data.get("code") == 0:
+            return data["data"]["url"]
+        raise Exception("Failed to get web URL")
 
     def get_random_proxy(self) -> str:
         """Select a random proxy from proxies.txt and remove it."""
@@ -778,44 +945,42 @@ class BumbleRegistration:
         for attempt in range(max_retries):
             try:
                 print(f"Connection attempt {attempt + 1}/{max_retries}")
-                
+
                 # Connect to specific device
                 os.system(f"adb connect {adb_address}")
                 time.sleep(2)
-                
+
                 # Always use -s flag to specify the device
                 os.system(f'adb -s {adb_address} shell "glogin {password}"')
                 time.sleep(2)
-                
+
                 # Initialize uiautomator2 with the specific device
                 self.device = u2.connect(adb_address)
-                
+
                 # Test connection
                 self.device.info
                 print("Successfully connected to device")
                 self.current_order_id = None
-                
+
                 # Initialize dynamic_flow after successful connection
                 self.dynamic_flow = DynamicBumbleFlow(self.device, self)
                 break
-                
+
             except Exception as e:
                 print(f"Connection attempt {attempt + 1} failed: {str(e)}")
                 # Disconnect only this specific device before retrying
                 os.system(f"adb disconnect {adb_address}")
                 time.sleep(2)
-                
+
                 if attempt < max_retries - 1:
                     print(f"Waiting {retry_delay} seconds before retrying...")
                     time.sleep(retry_delay)
                 else:
                     raise Exception(f"Failed to connect to device after {max_retries} attempts")
-                
+
     def delay(self, seconds: float = 2.5):
         """Add a delay between actions."""
         time.sleep(seconds)
-
-    
 
     def request_phone_number(self) -> Optional[str]:
         """Request a phone number from DaisySMS."""
@@ -892,20 +1057,19 @@ class BumbleRegistration:
             print(f"Error clicking 'Use cell phone number' button: {str(e)}")
             raise
 
-
     def enter_phone_number(self, phone_number: str):
         phone_input_field = self.device(resourceId="com.bumble.app:id/phone_edit_text")
-        
+
         if phone_input_field.exists:
             bounds = phone_input_field.info['bounds']
             # Get screenshot as bytes and convert to PIL Image
             screenshot = Image.open(io.BytesIO(self.device.screenshot(format='raw')))
             # Crop to input field bounds
-            cropped = screenshot.crop((bounds['left'], bounds['top'], 
-                                    bounds['right'], bounds['bottom']))
+            cropped = screenshot.crop((bounds['left'], bounds['top'],
+                                       bounds['right'], bounds['bottom']))
             # Use device OCR on cropped image
             has_number = len([c for c in self.device.ocr(cropped) if c.isdigit()]) > 0
-            
+
             if has_number:
                 print("Phone field has number. Skipping entry.")
             else:
@@ -923,7 +1087,6 @@ class BumbleRegistration:
 
         self.device(resourceId="com.bumble.app:id/reg_footer_button").click()
         self.delay()
-
 
     def click_ok_button(self):
         """Click OK button."""
@@ -1193,7 +1356,6 @@ class BumbleRegistration:
             self.delay()
         else:
             print("No 'Continue' button found.")
-
 
     def select_dating_preference(self):
         """Select dating preference."""
@@ -1655,7 +1817,7 @@ class BumbleRegistration:
             self.device(className="android.widget.Button", resourceId="com.bumble.app:id/reg_footer_button",
                         description="Continue").click()
             self.delay()
-    
+
     def select_opening_move(self):
         """Selects introvert/extrovert option or hits Skip if not found"""
         try:
@@ -1671,7 +1833,7 @@ class BumbleRegistration:
                     skip_button.click()
                     self.delay()
                     return
-                
+
             print("Clicking Continue using multiple methods...")
             try:
                 if self.device(className="android.widget.ImageButton").exists:
@@ -1682,8 +1844,8 @@ class BumbleRegistration:
                     self.device(className="android.view.View", description="Continue").click()
                 else:
                     screen_size = self.device.window_size()
-                    x = screen_size[0] - 50  
-                    y = screen_size[1] - 50  
+                    x = screen_size[0] - 50
+                    y = screen_size[1] - 50
                     self.device.click(x, y)
                 print("Continue button clicked successfully")
             except Exception as e:
@@ -1691,9 +1853,6 @@ class BumbleRegistration:
             self.delay()
         except Exception as e:
             print(f"Error in opening move selection: {e}")
-
-
-
 
     def finish_registration(self):
         """Complete the final registration steps."""
@@ -1751,79 +1910,143 @@ class BumbleRegistration:
         return self.dynamic_flow.finished
 
 
-def main():
-    """Main function to execute the entire workflow."""
-    try:
-        # Add small random delay to prevent simultaneous connections
-        time.sleep(random.uniform(1, 5))
+from concurrent.futures import ThreadPoolExecutor
 
+
+def process_phone(i, token_manager, lat, lon):
+    """Process a single phone instance."""
+    try:
         # Initialize and setup cloud phone
         cloud_phone = CloudPhoneManager()
+
+        # Set coordinates
+        cloud_phone.set_coordinates(lat, lon)
+
+        # Create profile with DMT proxy
         creation_response = cloud_phone.create_profile()
 
         if not cloud_phone.profile_id:
-            print("Failed to create profile.")
-            return
+            token_manager.save_failed_token("unknown", f"Failed to create profile for phone {i + 1}")
+            print(f"Failed to create profile for phone {i + 1}")
+            return None
 
         # Start the profile
         profile_url = cloud_phone.start_profile()
-        print(f"Profile started successfully. URL: {profile_url}")
+        print(f"Phone {i + 1} started successfully. URL: {profile_url}")
 
         # Wait for initialization
-        print("Waiting for cloud phone to initialize...")
+        print(f"Phone {i + 1}: Waiting for initialization...")
         time.sleep(80)
 
         # Process and upload images
         cloud_phone.process_subfolder()
 
+        # Switch to ProxyEmpire proxy
+        print(f"Phone {i + 1}: Switching to ProxyEmpire proxy...")
+        cloud_phone.switch_to_proxyempire()
+
         # Enable ADB and get connection info
-        print("Enabling ADB...")
+        print(f"Phone {i + 1}: Enabling ADB...")
         cloud_phone.enable_adb()
 
-        print("Getting ADB info...")
+        print(f"Phone {i + 1}: Getting ADB info...")
         adb_info = cloud_phone.get_adb_info()
 
         if not adb_info:
-            raise Exception("Failed to get ADB info")
+            raise Exception(f"Failed to get ADB info for phone {i + 1}")
 
-        print("ADB info retrieved successfully")
+        print(f"Phone {i + 1}: ADB info retrieved successfully")
 
         # Create ADB address for connection
         adb_address = f"{adb_info['ip']}:{adb_info['port']}"
-        print(f"Connecting to device at: {adb_address}")
+        print(f"Phone {i + 1}: Connecting to device at: {adb_address}")
 
-        # Initialize ADB connection and glogin WITHOUT killing the server
-        print("Initializing device connection...")
+        # Initialize ADB connection and glogin
+        print(f"Phone {i + 1}: Initializing device connection...")
         os.system(f"adb connect {adb_address}")
         time.sleep(2)
-        os.system(f'adb shell "glogin {adb_info["password"]}"')
+        os.system(f'adb -s {adb_address} shell "glogin {adb_info["password"]}"')
         time.sleep(2)
 
-        try:
-            bumble = BumbleRegistration(adb_address, adb_info['password'])
-        except Exception as e:
-            print(f"Error initializing BumbleRegistration: {str(e)}")
-            raise
+        bumble = BumbleRegistration(adb_address, adb_info['password'])
 
-        # Only start Bumble after all connections are established
-        print("Starting Bumble app...")
+        # Start Bumble app
+        print(f"Phone {i + 1}: Starting Bumble app...")
         cloud_phone.start_bumble()
-        print("Waiting for Bumble to initialize...")
+        print(f"Phone {i + 1}: Waiting for Bumble to initialize...")
         time.sleep(5)
 
         # Run the registration process
         success = bumble.run_screen_loop()
 
         if success:
-            print("Bumble registration completed successfully!")
+            token_manager.save_success_token(
+                cloud_phone.profile_id,
+                adb_info.get('location', 'unknown')
+            )
+            print(f"Phone {i + 1}: Bumble registration completed successfully!")
+
+            # Get web URL
+            web_url = cloud_phone.get_web_url()
+            print(f"Phone {i + 1} Web Access URL: {web_url}")
+            return cloud_phone
         else:
-            print("Bumble registration failed.")
+            token_manager.save_failed_token(
+                cloud_phone.profile_id,
+                f"Registration failed for phone {i + 1}"
+            )
+            print(f"Phone {i + 1}: Bumble registration failed.")
+            return None
+
+    except Exception as e:
+        print(f"Error with phone {i + 1}: {str(e)}")
+        return None
+
+
+def main():
+    """Main function to execute the entire workflow."""
+    token_manager = TokenManager()
+    cloud_phones = []
+
+    try:
+        # Get coordinates from user
+        lat = float(input("Enter latitude: "))
+        lon = float(input("Enter longitude: "))
+
+        # Parallel processing for 5 phones
+        with ThreadPoolExecutor(max_workers=5) as executor:
+            futures = [
+                executor.submit(process_phone, i, token_manager, lat, lon)
+                for i in range(5)
+            ]
+
+            # Collect results as they complete
+            for future in futures:
+                result = future.result()
+                if result:
+                    cloud_phones.append(result)
 
     except Exception as e:
         print(f"Error during automation process: {str(e)}")
         import traceback
         print("Full error details:")
         print(traceback.format_exc())
+
+    finally:
+        # Print today's stats
+        counts = token_manager.get_token_count()
+        print(f"\nToday's stats:")
+        print(f"Successful tokens: {counts['success']}")
+        print(f"Failed tokens: {counts['failed']}")
+
+        # Print all web URLs
+        print("\nWeb Access URLs:")
+        for i, phone in enumerate(cloud_phones):
+            try:
+                url = phone.get_web_url()
+                print(f"Phone {i + 1}: {url}")
+            except:
+                print(f"Phone {i + 1}: Failed to get URL")
 
 
 if __name__ == "__main__":
