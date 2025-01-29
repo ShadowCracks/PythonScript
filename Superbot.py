@@ -1,12 +1,13 @@
 import os
 import uuid
 import time
+import threading
 import hashlib
 import requests
 import shutil
 import random
 import uiautomator2 as u2
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Optional, Dict, Any
 from xml.etree import ElementTree
 from typing import Union, List
@@ -18,6 +19,7 @@ from datetime import datetime
 UPDATE_PROXY_URL = "https://openapi.geelark.com/open/v1/phone/updateProxy"
 GET_WEB_URL = "https://openapi.geelark.com/open/v1/phone/getWebUrl"
 
+lock = threading.Lock()
 
 class TokenManager:
     def __init__(self):
@@ -563,6 +565,7 @@ APP_ID = "ME7YWKTAFWBJEUX4AZQCKIGN"
 API_KEY = "B5OH6I6R7BI1024DULUA02VUZLP7QF"
 CREATE_PROFILE_URL = "https://openapi.geelark.com/open/v1/phone/add"
 START_PROFILE_URL = "https://openapi.geelark.com/open/v1/phone/start"
+STOP_PROFILE_URL = "https://openapi.geelark.com/open/v1/phone/stop"
 GPS_INFO_URL = "https://openapi.geelark.com/open/v1/phone/gps/get"
 GET_UPLOAD_URL = "https://openapi.geelark.com/open/v1/upload/getUrl"
 UPLOAD_TO_PHONE_URL = "https://openapi.geelark.com/open/v1/phone/uploadFile"
@@ -680,22 +683,23 @@ class CloudPhoneManager:
 
     def get_random_proxy(self) -> str:
         """Select a random proxy from proxies.txt and remove it."""
-        try:
-            with open(PROXY_FILE, "r") as f:
-                proxies = f.readlines()
+        with lock:
+            try:
+                with open(PROXY_FILE, "r") as f:
+                    proxies = f.readlines()
 
-            if not proxies:
-                raise ValueError("Proxy file is empty. Please add proxies to the file.")
+                if not proxies:
+                    raise ValueError("Proxy file is empty. Please add proxies to the file.")
 
-            selected_proxy = random.choice(proxies).strip()
-            updated_proxies = [proxy for proxy in proxies if proxy.strip() != selected_proxy]
+                selected_proxy = random.choice(proxies).strip()
+                updated_proxies = [proxy for proxy in proxies if proxy.strip() != selected_proxy]
 
-            with open(PROXY_FILE, "w") as f:
-                f.writelines(updated_proxies)
+                with open(PROXY_FILE, "w") as f:
+                    f.writelines(updated_proxies)
 
-            return selected_proxy
-        except FileNotFoundError:
-            raise FileNotFoundError(f"Proxy file '{PROXY_FILE}' not found.")
+                return selected_proxy
+            except FileNotFoundError:
+                raise FileNotFoundError(f"Proxy file '{PROXY_FILE}' not found.")
 
     def parse_proxy(self, proxy: str) -> Dict[str, Any]:
         parts = proxy.split(":")
@@ -746,6 +750,19 @@ class CloudPhoneManager:
             return success_details["url"]
         else:
             raise Exception(f"Failed to start profile: {response_data.get('msg')}")
+
+    def stop_profile(self):
+        """Stop the cloud phone profile."""
+        headers = self.generate_headers()
+        payload = {"ids": [self.profile_id]}
+        response = requests.post(STOP_PROFILE_URL, headers=headers, json=payload)
+        response_data = response.json()
+        print("DEBUG stop_profile response_data =", response_data)
+
+        if response_data["data"]["successAmount"] == 0:
+            raise Exception(f"Failed to stop profile: {response_data["data"]["failDetails"][0]["msg"]}")
+
+        print("Profile stopped successfully!")
 
     def enable_adb(self):
         """Enable ADB for the cloud phone."""
@@ -2002,10 +2019,17 @@ def process_phone(i, token_manager, lat, lon):
         print(f"Error with phone {i + 1}: {str(e)}")
         return None
 
+def task_generator():
+    """Generates an unlimited number of tasks."""
+    task_id = 1
+    while True:
+        yield task_id
+        task_id += 1
 
 def main():
     """Main function to execute the entire workflow."""
     token_manager = TokenManager()
+    task_generator_iterator = task_generator()
     cloud_phones = []
 
     try:
@@ -2015,16 +2039,31 @@ def main():
 
         # Parallel processing for 5 phones
         with ThreadPoolExecutor(max_workers=5) as executor:
-            futures = [
-                executor.submit(process_phone, i, token_manager, lat, lon)
-                for i in range(5)
-            ]
+            futures = []
 
-            # Collect results as they complete
-            for future in futures:
-                result = future.result()
-                if result:
+            # Start initial tasks
+            for _ in range(5):
+                task_id = next(task_generator_iterator)
+                future = executor.submit(process_phone, task_id, token_manager, lat, lon)
+                futures.append(future)
+
+            # Process tasks dynamically as they complete
+            while True:
+                any_completed_task = False
+                for completed_future in as_completed(futures):
+                    result = completed_future.result() # Get the result of the completed task
                     cloud_phones.append(result)
+
+                    # Creating new task in the place of the finished one
+                    new_task_id = next(task_generator_iterator)
+                    future = executor.submit(process_phone, new_task_id, token_manager, lat, lon)
+                    futures.append(future)
+
+                    any_completed_task = True
+
+                if any_completed_task:
+                    # Removing the completed tasks from the list if there's any
+                    futures = [future for future in futures if not future.done()]
 
     except Exception as e:
         print(f"Error during automation process: {str(e)}")
