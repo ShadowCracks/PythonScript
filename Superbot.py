@@ -429,23 +429,24 @@ class DynamicBumbleFlow:
             'swipes_completed': 0
         })
 
-    def run_flow(self):
-        """Run the dynamic flow"""
-        while not self.finished:
-            screen_name = self.identify_current_screen()
-            print(f"Current screen: {screen_name}")
+    # Duplicate function run_flow
+    # def run_flow(self):
+    #     """Run the dynamic flow"""
+    #     while not self.finished:
+    #         screen_name = self.identify_current_screen()
+    #         print(f"Current screen: {screen_name}")
 
-            if screen_name in self.screen_actions:
-                # Regular screen handling
-                action = self.screen_actions[screen_name]["action"]
-                try:
-                    action()
-                    time.sleep(2)
-                except Exception as e:
-                    print(f"Error executing action: {e}")
-                    self.try_fallback_buttons()
-            else:
-                self.try_fallback_buttons()
+    #         if screen_name in self.screen_actions:
+    #             # Regular screen handling
+    #             action = self.screen_actions[screen_name]["action"]
+    #             try:
+    #                 action()
+    #                 time.sleep(2)
+    #             except Exception as e:
+    #                 print(f"Error executing action: {e}")
+    #                 self.try_fallback_buttons()
+    #         else:
+    #             self.try_fallback_buttons()
 
     def identify_current_screen(self) -> str:
         """Identify the current screen based on XML hierarchy"""
@@ -480,6 +481,7 @@ class DynamicBumbleFlow:
         return False
 
     def run_flow(self):
+        """Run the dynamic flow"""
         while not self.finished:
             screen_name = self.identify_current_screen()
             print(f"Current screen: {screen_name}")
@@ -561,8 +563,8 @@ def wait_for_element(device, class_name=None, resource_id=None, text=None, descr
 
 
 # Cloud Phone API Constants
-APP_ID = "ME7YWKTAFWBJEUX4AZQCKIGN"
-API_KEY = "B5OH6I6R7BI1024DULUA02VUZLP7QF"
+APP_ID = "Z8PL2V3FQO3XO33QRC7L2DT9"
+API_KEY = "76CS22GDC4QA9O99YEW1891Y4XWOZW"
 CREATE_PROFILE_URL = "https://openapi.geelark.com/open/v1/phone/add"
 START_PROFILE_URL = "https://openapi.geelark.com/open/v1/phone/start"
 STOP_PROFILE_URL = "https://openapi.geelark.com/open/v1/phone/stop"
@@ -629,37 +631,38 @@ class CloudPhoneManager:
             "sign": sign
         }
 
-    def create_profile(self) -> Dict[str, Any]:
-        """Create a cloud phone profile with DMT proxy initially."""
-        # Use DMT proxy for initial setup
-        dmt_proxy_parts = self.dmt_proxy.replace("socks5://", "").split("@")
-        auth_parts = dmt_proxy_parts[0].split(":")
-        proxy_parts = dmt_proxy_parts[1].split(":")
+    # Duplicate function with dmt proxy
+    # def create_profile(self) -> Dict[str, Any]:
+    #     """Create a cloud phone profile with DMT proxy initially."""
+    #     # Use DMT proxy for initial setup
+    #     dmt_proxy_parts = self.dmt_proxy.replace("socks5://", "").split("@")
+    #     auth_parts = dmt_proxy_parts[0].split(":")
+    #     proxy_parts = dmt_proxy_parts[1].split(":")
 
-        proxy_config = {
-            "typeId": 1,
-            "server": proxy_parts[0],
-            "port": int(proxy_parts[1]),
-            "username": auth_parts[0],
-            "password": auth_parts[1]
-        }
+    #     proxy_config = {
+    #         "typeId": 1,
+    #         "server": proxy_parts[0],
+    #         "port": int(proxy_parts[1]),
+    #         "username": auth_parts[0],
+    #         "password": auth_parts[1]
+    #     }
 
-        PROFILE_SETTINGS["proxyConfig"] = proxy_config
+    #     PROFILE_SETTINGS["proxyConfig"] = proxy_config
 
-        headers = self.generate_headers()
-        response = requests.post(CREATE_PROFILE_URL, headers=headers, json=PROFILE_SETTINGS)
+    #     headers = self.generate_headers()
+    #     response = requests.post(CREATE_PROFILE_URL, headers=headers, json=PROFILE_SETTINGS)
 
-        print("DEBUG create_profile response:", response.json())
-        creation_response = response.json()
+    #     print("DEBUG create_profile response:", response.json())
+    #     creation_response = response.json()
 
-        profile_data = creation_response.get("data", {}).get("details", [{}])[0]
-        self.profile_id = profile_data.get("id")
+    #     profile_data = creation_response.get("data", {}).get("details", [{}])[0]
+    #     self.profile_id = profile_data.get("id")
 
-        if self.profile_id:
-            return creation_response
-        else:
-            print("Failed to create profile. Response:", creation_response)
-            return creation_response
+    #     if self.profile_id:
+    #         return creation_response
+    #     else:
+    #         print("Failed to create profile. Response:", creation_response)
+    #         return creation_response
 
     def switch_to_proxyempire(self):
         """switch from DMT proxy to ProxyEmpire proxy."""
@@ -2016,6 +2019,9 @@ def process_phone(i, token_manager, lat, lon):
             return None
 
     except Exception as e:
+        if "Proxy file is empty" in str(e):
+            raise ValueError("Proxy file is empty. Please add proxies to the file.")
+        
         print(f"Error with phone {i + 1}: {str(e)}")
         return None
 
@@ -2032,60 +2038,56 @@ def main():
     task_generator_iterator = task_generator()
     cloud_phones = []
 
-    try:
-        # Get coordinates from user
-        lat = float(input("Enter latitude: "))
-        lon = float(input("Enter longitude: "))
+    # Get coordinates from user
+    lat = float(input("Enter latitude: "))
+    lon = float(input("Enter longitude: "))
 
-        # Parallel processing for 5 phones
-        with ThreadPoolExecutor(max_workers=5) as executor:
-            futures = []
+    # Parallel processing for 5 phones
+    with ThreadPoolExecutor(max_workers=5) as executor:
+        proxy_exhausted = False  # Flag to stop creating new tasks when proxies run out
+        futures = []
 
-            # Start initial tasks
-            for _ in range(5):
-                task_id = next(task_generator_iterator)
-                future = executor.submit(process_phone, task_id, token_manager, lat, lon)
-                futures.append(future)
+        # Start initial tasks
+        for _ in range(5):
+            task_id = next(task_generator_iterator)
+            future = executor.submit(process_phone, task_id, token_manager, lat, lon)
+            futures.append(future)
 
-            # Process tasks dynamically as they complete
-            while True:
-                any_completed_task = False
-                for completed_future in as_completed(futures):
+        # Process tasks dynamically as they complete
+        while futures:
+            any_completed_task = False
+            for completed_future in as_completed(futures):
+                try:
                     result = completed_future.result() # Get the result of the completed task
                     cloud_phones.append(result)
+                except Exception as e:
+                    error_message = str(e)
+                    print(f"Error during automation process: {error_message}")
+                    import traceback
+                    print("Full error details:")
+                    print(traceback.format_exc())
 
+                    # Break the loop if the specific exception occurs
+                    if "Proxy file is empty" in error_message:
+                        print("Proxies are finished. No new tasks will be created.")
+                        proxy_exhausted = True  # Set flag to stop new tasks
+
+                # Only create new tasks if proxies are available
+                if not proxy_exhausted:
                     # Creating new task in the place of the finished one
                     new_task_id = next(task_generator_iterator)
-                    future = executor.submit(process_phone, new_task_id, token_manager, lat, lon)
-                    futures.append(future)
+                    futures.append(executor.submit(process_phone, new_task_id, token_manager, lat, lon))
+                
+                any_completed_task = True
 
-                    any_completed_task = True
-
-                if any_completed_task:
-                    # Removing the completed tasks from the list if there's any
-                    futures = [future for future in futures if not future.done()]
-
-    except Exception as e:
-        print(f"Error during automation process: {str(e)}")
-        import traceback
-        print("Full error details:")
-        print(traceback.format_exc())
-
-    finally:
-        # Print today's stats
-        counts = token_manager.get_token_count()
-        print(f"\nToday's stats:")
-        print(f"Successful tokens: {counts['success']}")
-        print(f"Failed tokens: {counts['failed']}")
-
-        # Print all web URLs
-        print("\nWeb Access URLs:")
-        for i, phone in enumerate(cloud_phones):
-            try:
-                url = phone.get_web_url()
-                print(f"Phone {i + 1}: {url}")
-            except:
-                print(f"Phone {i + 1}: Failed to get URL")
+            if any_completed_task:
+                # Removing the completed tasks from the list if there's any
+                futures = [future for future in futures if not future.done()]
+            
+            # If proxies are exhausted and all tasks are finished, stop the bot
+            if proxy_exhausted and not futures:
+                print("All tasks completed, and proxies are finished. Stopping bot.")
+                break
 
 
 if __name__ == "__main__":
