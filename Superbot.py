@@ -1595,8 +1595,8 @@ class BumbleRegistration:
         }
 
         self.device(
-            className="android.widget.RadioButton",
-            descriptionContains=partial_map[selected_habit]
+            className="android.widget.TextView",
+            textContains=partial_map[selected_habit]
         ).click()
         self.delay()
 
