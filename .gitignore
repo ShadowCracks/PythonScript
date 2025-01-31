@@ -1,2 +1,3 @@
 /foo.py
 /venv
+*.xml

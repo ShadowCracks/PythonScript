@@ -429,25 +429,6 @@ class DynamicBumbleFlow:
             'swipes_completed': 0
         })
 
-    # Duplicate function run_flow
-    # def run_flow(self):
-    #     """Run the dynamic flow"""
-    #     while not self.finished:
-    #         screen_name = self.identify_current_screen()
-    #         print(f"Current screen: {screen_name}")
-
-    #         if screen_name in self.screen_actions:
-    #             # Regular screen handling
-    #             action = self.screen_actions[screen_name]["action"]
-    #             try:
-    #                 action()
-    #                 time.sleep(2)
-    #             except Exception as e:
-    #                 print(f"Error executing action: {e}")
-    #                 self.try_fallback_buttons()
-    #         else:
-    #             self.try_fallback_buttons()
-
     def identify_current_screen(self) -> str:
         """Identify the current screen based on XML hierarchy"""
         xml = self.device.dump_hierarchy()
@@ -482,9 +463,20 @@ class DynamicBumbleFlow:
 
     def run_flow(self):
         """Run the dynamic flow"""
+        screen_visited = None
+        counter = 0
         while not self.finished:
             screen_name = self.identify_current_screen()
             print(f"Current screen: {screen_name}")
+
+            if screen_name == screen_visited:
+                if counter == 2:
+                    break
+
+                counter = counter + 1
+            else:
+                counter = 0
+                screen_visited = screen_name
 
             if screen_name in self.screen_actions:
                 # Regular screen handling
@@ -591,7 +583,7 @@ NAMES_FILE = os.path.join(SCRIPT_DIR, "names.txt")
 PROFILE_SETTINGS = {
     "amount": 1,
     "androidVersion": 4,  # Android 13
-    "groupName": "API",
+    "groupName": "DMT",
     "tagsName": ["API - 1"],
     "region": None,  # Auto-match
     "remark": "",
@@ -755,17 +747,18 @@ class CloudPhoneManager:
             raise Exception(f"Failed to start profile: {response_data.get('msg')}")
 
     def stop_profile(self):
-        """Stop the cloud phone profile."""
-        headers = self.generate_headers()
-        payload = {"ids": [self.profile_id]}
-        response = requests.post(STOP_PROFILE_URL, headers=headers, json=payload)
-        response_data = response.json()
-        print("DEBUG stop_profile response_data =", response_data)
+        """Stop the cloud phone profile if it's open."""
+        if self.profile_id:
+            headers = self.generate_headers()
+            payload = {"ids": [self.profile_id]}
+            response = requests.post(STOP_PROFILE_URL, headers=headers, json=payload)
+            response_data = response.json()
+            print("DEBUG stop_profile response_data =", response_data)
 
-        if response_data["data"]["successAmount"] == 0:
-            raise Exception(f"Failed to stop profile: {response_data["data"]["failDetails"][0]["msg"]}")
+            if response_data["data"]["successAmount"] == 0:
+                raise Exception(f"Failed to stop profile: {response_data["data"]["failDetails"][0]["msg"]}")
 
-        print("Profile stopped successfully!")
+            print("Profile stopped successfully!")
 
     def enable_adb(self):
         """Enable ADB for the cloud phone."""
@@ -948,7 +941,7 @@ class CloudPhoneManager:
                     time.sleep(4)  # Wait for app to fully start
                 else:
                     raise Exception(f"Failed to start Bumble app: {response_data.get('msg')}")
-                return
+                
         print("Bumble app is not installed on this device.")
 
 
@@ -2006,6 +1999,9 @@ def process_phone(i, token_manager, lat, lon):
             )
             print(f"Phone {i + 1}: Bumble registration completed successfully!")
 
+            # Closing the profile if it's running
+            cloud_phone.stop_profile()
+
             # Get web URL
             web_url = cloud_phone.get_web_url()
             print(f"Phone {i + 1} Web Access URL: {web_url}")
@@ -2015,10 +2011,17 @@ def process_phone(i, token_manager, lat, lon):
                 cloud_phone.profile_id,
                 f"Registration failed for phone {i + 1}"
             )
+
+            # Closing the profile if it's running
+            cloud_phone.stop_profile()
+
             print(f"Phone {i + 1}: Bumble registration failed.")
             return None
 
     except Exception as e:
+        # Closing the profile if it's running
+        cloud_phone.stop_profile()
+        
         if "Proxy file is empty" in str(e):
             raise ValueError("Proxy file is empty. Please add proxies to the file.")
         
@@ -2063,9 +2066,6 @@ def main():
                 except Exception as e:
                     error_message = str(e)
                     print(f"Error during automation process: {error_message}")
-                    import traceback
-                    print("Full error details:")
-                    print(traceback.format_exc())
 
                     # Break the loop if the specific exception occurs
                     if "Proxy file is empty" in error_message:
