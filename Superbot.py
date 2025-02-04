@@ -459,6 +459,8 @@ class DynamicBumbleFlow:
                 self.device(text=button_text).click()
                 time.sleep(2)
                 return True
+            
+        self.bumble.Skip()
         return False
 
     def run_flow(self):
@@ -469,7 +471,7 @@ class DynamicBumbleFlow:
             screen_name = self.identify_current_screen()
             print(f"Current screen: {screen_name}")
 
-            if screen_name == screen_visited:
+            if screen_name == screen_visited and screen_name != "swipe_screen":
                 if counter == 2:
                     break
 
@@ -484,6 +486,7 @@ class DynamicBumbleFlow:
                 try:
                     action()
                     time.sleep(2)
+                    counter = 0
                 except Exception as e:
                     print(f"Error executing action: {e}")
                     self.try_fallback_buttons()
@@ -509,30 +512,6 @@ class DynamicBumbleFlow:
             return self.find_resource_id_in_xml(root, value)
         # Add other identifier types as needed
         return False
-
-    def try_fallback_buttons(self):
-        """Try common buttons when screen isn't recognized"""
-        common_buttons = [
-            "YES",  # For right swipe confirmation
-            "NOT INTERESTED",  # For left swipe confirmation
-            "Maybe later",
-            "Continue",
-            "Confirm",
-            "OK",
-            "Allow",
-            "I accept",
-            "Got it",
-            "Change number",
-            "Start connecting"
-        ]
-        for button_text in common_buttons:
-            if self.device(text=button_text).exists:
-                print(f"Clicking fallback button: {button_text}")
-                self.device(text=button_text).click()
-                time.sleep(2)
-                return True
-        return False
-
 
 def wait_for_element(device, class_name=None, resource_id=None, text=None, description=None, timeout=80,
                      poll_interval=0.5):
